@@ -42,6 +42,14 @@ Whisper la transcribe, así que la marca cae exactamente donde la dijiste, sin
 sincronizar relojes. Si el segmento es solo la frase, se silencia: marca el
 clip pero no entra en él. Las frases se configuran en `marks.phrases`.
 
+No hace falta decirla clavada: se comparan **por parecido** (`marks.similarity`,
+0.85 por defecto), así que "esto es short" o un "shot" mal transcrito siguen
+marcando. Mencionar el tema de pasada no dispara nada — *"no todo lo que grabo
+es un short"* no marca. Cuando una marca entra por parecido y no literal, la
+corrida lo dice en pantalla, para que veas si el gatillo se te está disparando
+solo. Si quieres máxima precisión, usa un gatillo corto y distinto de tu habla
+normal ("marca aquí") en vez de una frase larga.
+
 **Por hotkey o archivo:** deja un `<video>.marks.txt` junto a la grabación, un
 tiempo por línea (`12:34`, `1:02:03` o segundos sueltos). Sirve cualquier cosa
 que escriba timestamps —el hotkey de tu grabadora, un bloc de notas— o el

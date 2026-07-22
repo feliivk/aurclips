@@ -11,7 +11,7 @@ from pathlib import Path
 import yaml
 
 from aurclips.config import Config
-from aurclips.marks import parse_timecode, sidecar_path
+from aurclips.marks import match_phrase, normalize, parse_timecode, sidecar_path
 from aurclips.select_clips import select_clips
 
 
@@ -110,6 +110,83 @@ def test_sin_marcas_todo_sigue_igual(tmp_path):
     assert len(clips) == 1
     assert clips[0].start_s < 100
     assert not clips[0].marked
+
+
+# --- la frase gatillo no se dice igual dos veces -------------------------
+
+def _con_frase(frase: str) -> dict:
+    """Gancho fuerte en el minuto 1; la frase a probar antes del minuto 3."""
+    tr = _transcript()
+    tr["segments"][6] = _seg(60.0, 70.0, HOT_A)
+    tr["segments"][7] = _seg(70.0, 80.0, HOT_B)
+    tr["segments"][17] = _seg(170.0, 180.0, frase)
+    return tr
+
+
+def test_la_marca_tolera_que_no_la_digas_igual(tmp_path):
+    # dijiste "esto es short" (sin el "un") y Whisper lo escribió así:
+    # la marca no se pierde por una palabra
+    cfg = _cfg(tmp_path, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase("Esto es short."), "casi igual",
+                         _video(tmp_path))
+    assert clips[0].marked
+    assert clips[0].start_s - 3 <= 180 <= clips[0].end_s + 3
+
+
+def test_hablar_de_shorts_no_marca(tmp_path):
+    # mencionar la palabra en una frase normal NO es marcar: si lo fuera,
+    # cualquier charla sobre el canal secuestraría la selección
+    cfg = _cfg(tmp_path, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase("No todo lo que grabo es un short."),
+                         "mención suelta", _video(tmp_path))
+    assert not clips[0].marked
+    assert clips[0].start_s < 100
+
+
+def test_umbral_de_parecido_exigente_solo_acepta_la_frase_literal(tmp_path):
+    cfg = _cfg(tmp_path, marks={"similarity": 1.0}, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase("Esto es short."), "umbral estricto",
+                         _video(tmp_path))
+    assert not clips[0].marked
+
+
+def test_parecido_de_la_frase_gatillo():
+    gatillo = normalize("esto es un short")
+    assert match_phrase(normalize("esto es un short"), gatillo, 0.85) == 1.0
+    assert match_phrase(normalize("¡Esto, es un SHORT!"), gatillo, 0.85) == 1.0
+    assert match_phrase(normalize("esto es un shot"), gatillo, 0.85) > 0.9
+    assert match_phrase(normalize("esto es un problema"), gatillo, 0.85) == 0.0
+
+
+CASI = "Esto va a ser un short."  # 0.79: variante real que se queda corta
+
+
+def test_el_casi_marca_avisa_con_el_numero_crudo(tmp_path, capsys):
+    # el falso negativo es el caso que hay que poder calibrar: si dijiste la
+    # frase y el video salió sin marcar, la corrida dice cuánto le faltó
+    cfg = _cfg(tmp_path, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase(CASI), "casi marca", _video(tmp_path))
+    salida = capsys.readouterr().out
+    assert not clips[0].marked
+    assert "casi marca" in salida
+    assert "79%" in salida and "umbral 85%" in salida
+
+
+def test_el_umbral_recalibrado_recupera_esa_marca(tmp_path):
+    # y con el número a la vista, bajar el umbral hace exactamente lo esperado
+    cfg = _cfg(tmp_path, marks={"similarity": 0.75}, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase(CASI), "umbral bajado", _video(tmp_path))
+    assert clips[0].marked
+
+
+def test_sin_avisos_de_ruido_cuando_ya_marcaste(tmp_path, capsys):
+    # con el video ya marcado, no se avisa de cada frase que se parece de
+    # lejos: un aviso que sale siempre enseña a ignorar los avisos
+    cfg = _cfg(tmp_path, clips_per_video=2, minutes_per_short=0)
+    tr = _con_frase("Esto es un short.")
+    tr["segments"][12] = _seg(120.0, 130.0, "Y esto es un problema serio.")
+    select_clips(cfg, tr, "marcado y con ruido", _video(tmp_path))
+    assert "casi marca" not in capsys.readouterr().out
 
 
 # --- marcas por archivo -------------------------------------------------

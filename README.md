@@ -152,7 +152,9 @@ Suelta cualquier video largo en `data\inbox\` y corre `run`.
 
 Dilo en voz alta mientras grabas —**"esto es un short"**— y el selector prioriza
 ese momento por encima de su propia puntuación. El segmento con la frase se
-silencia, así que marca el clip pero no entra en él. Alternativa por timestamps:
+silencia, así que marca el clip pero no entra en él. No hace falta decirla
+clavada (se compara por parecido) ni marcar todos los videos: uno sin marcas se
+selecciona como siempre. Alternativa por timestamps:
 un `<video>.marks.txt` al lado de la grabación, que puedes escribir con el
 hotkey de tu grabadora o con `aurclips mark`. Guía completa:
 [Grabar en beats](docs/grabar-en-beats.md).
@@ -186,7 +188,8 @@ propio archivo):
 | --- | --- | --- |
 | `channel.angle` / `title_examples` | Contexto con el que se escriben los títulos | vacío |
 | `marks.phrases` | Frases gatillo para marcar hablando | `esto es un short`, … |
-| `marks.exclusive` | Si hay marcas, ignorar el resto del video | `true` |
+| `marks.similarity` | Tolerancia al decir la frase (1.0 = literal) | `0.85` |
+| `marks.exclusive` | Si hay marcas, ignorar el resto del video (un video sin marcas se selecciona normal) | `true` |
 | `selection.profile` | Calibración del selector: `comentario` / `gaming` | `comentario` |
 | `selection.weights` | Ajuste fino por señal sobre el perfil | `{}` |
 | `selection.clips_per_video` | Tope máximo de Shorts por video | `3` |
@@ -241,6 +244,15 @@ van además a `logs\events.log`.
 - **Estado beta**: los defaults van a cambiar mientras se calibra. Si tocas
   `selection.weights`, anota por qué —y comprueba contra `report`, no contra la
   intuición.
+- **Calidad sobre volumen, y lo que eso implica**: `quality_floor` es relativo
+  al mejor candidato *de cada video*, así que un video con un solo momento
+  fuerte rinde **un** Short, no tres (medido en datos sintéticos: sobrevive 1
+  de 11 candidatos, en ambos perfiles). Tus marcas quedan exentas, así que el
+  volumen real depende de cuánto marques al grabar: **sin marcar, cuenta con
+  ~1 Short por video fuente**. Es el primer número que hay que revisar con
+  material propio —la distribución real puede abrirse o comprimirse distinto—
+  y si el volumen se queda corto, el dial es `selection.quality_floor`, no los
+  pesos.
 - **Cuota de YouTube API**: cada subida cuesta ~1600 unidades de las 10,000
   diarias por defecto → máximo ~6 subidas al día. El bot programa las fechas de
   publicación en cadena, así que no necesitas subir más de unos pocos por corrida.

@@ -149,12 +149,16 @@ def cmd_review(cfg: Config, db: State):
     donde tu criterio entra al pipeline sin tener que tocar código.
     """
     from . import titles
+    from .stats import review_header
 
     clips = db.clips_to_review()
     if not clips:
         print("No hay clips esperando revisión.")
         return
     llm = titles.enabled(cfg)
+    for line in review_header(db):  # los datos, donde se toman las decisiones
+        print(line)
+    print()
     print(f"{len(clips)} clip(s) por revisar.")
     print("[Enter] aprobar · [t] título · [d] descripción · "
           f"{'[r] regenerar · ' if llm else ''}[x] descartar · [s] saltar · [q] salir")
@@ -283,9 +287,14 @@ def cmd_run(cfg: Config, db: State):
     notify(cfg, "run",
            f"Corrida completa: {uploaded} clips subidos en total, {queued} en cola")
     print("\nCorrida completa.")
+    # la corrida diaria pasa de madrugada: si algo espera tu criterio, que te
+    # busque a ti — el loop no se cierra solo
     pending = len(db.clips_to_review())
     if pending and cfg.get("review.enabled", True):
         print(f"{pending} clip(s) esperan tu visto bueno: python -m aurclips review")
+        notify(cfg, "review",
+               f"{pending} clip(s) listos y esperando tu revisión "
+               f"(python -m aurclips review)")
 
 
 COMMANDS = {

@@ -19,6 +19,7 @@ igual si marcaste justo antes del beat (voz) o justo después (hotkey).
 
 from __future__ import annotations
 
+import difflib
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -37,6 +38,13 @@ DEFAULT_PHRASES = (
 # pegada al contenido, se conserva (perder texto real cuesta más que colar
 # tres palabras de más)
 MUTE_SLACK_CHARS = 12
+
+# Nadie dice la frase igual dos veces, y Whisper tampoco la escribe igual
+# siempre: "esto es short", "esto es un shot". El gatillo se compara por
+# parecido, no por igualdad. 1.0 = exigir la frase literal.
+DEFAULT_SIMILARITY = 0.85
+NEAR_MISS = 0.15  # se avisa de lo que se quedó a esto del umbral
+MAX_NOTES = 3     # sin inundar el log: solo las que más cerca estuvieron
 
 
 @dataclass
@@ -105,18 +113,73 @@ def file_marks(video_path: str | Path) -> list[float]:
     return sorted(times)
 
 
-def voice_marks(transcript: dict, phrases) -> tuple[list[float], set[float]]:
-    """(anclas, inicios de segmento a silenciar) para las frases gatillo."""
+def _best_ratio(tokens: list[str], phrase: str) -> float:
+    """Mejor parecido entre la frase y una ventana de palabras del segmento.
+
+    Se prueban ventanas de una palabra menos, iguales y una más que la frase,
+    para tolerar tanto que te comas una palabra como que metas una de más.
+    """
+    n = len(phrase.split())
+    best = 0.0
+    for size in {max(1, n - 1), n, n + 1}:
+        for i in range(max(1, len(tokens) - size + 1)):
+            window = " ".join(tokens[i:i + size])
+            if window:
+                best = max(best, difflib.SequenceMatcher(None, window, phrase).ratio())
+    return best
+
+
+def phrase_similarity(text: str, phrase: str) -> float:
+    """Parecido crudo (0..1) entre el texto normalizado y la frase gatillo.
+
+    Es el número con el que se calibra ``marks.similarity``, así que se expone
+    sin recortar: el umbral se aplica fuera.
+    """
+    if phrase in text:
+        return 1.0
+    return _best_ratio(text.split(), phrase)
+
+
+def match_phrase(text: str, phrase: str, threshold: float) -> float:
+    """El parecido si pasa el umbral, 0.0 si no. Puerta, no medición.
+
+    Así una marca no se pierde porque ese día dijeras "esto es short" en vez de
+    "esto es un short". Para el número crudo, :func:`phrase_similarity`.
+    """
+    ratio = phrase_similarity(text, phrase)
+    return ratio if ratio >= threshold else 0.0
+
+
+def voice_marks(transcript: dict, phrases,
+                similarity: float = DEFAULT_SIMILARITY
+                ) -> tuple[list[float], set[float], list[str]]:
+    """(anclas, inicios de segmento a silenciar, avisos de coincidencia difusa)."""
     wanted = [normalize(p) for p in phrases if normalize(p)]
     if not wanted:
-        return [], set()
+        return [], set(), []
     anchors: list[float] = []
     muted: set[float] = set()
+    notes: list[str] = []
+    near: list[tuple[float, str]] = []
     for seg in transcript.get("segments", []):
         text = normalize(seg.get("text", ""))
-        hit = next((p for p in wanted if p in text), None)
-        if hit is None:
+        if not text:
             continue
+        hit, ratio = "", 0.0
+        for phrase in wanted:
+            score = phrase_similarity(text, phrase)
+            if score > ratio:
+                hit, ratio = phrase, score
+        said = seg.get("text", "").strip()
+        if ratio < similarity:
+            # el falso negativo es el caso que importa calibrar: si dijiste la
+            # frase y no marcó, aquí está el número exacto que le faltó
+            if hit and ratio >= similarity - NEAR_MISS:
+                near.append((ratio, f'casi marca (no contó): "{said}" ≈ "{hit}" '
+                                    f'({ratio:.0%}, umbral {similarity:.0%})'))
+            continue
+        if ratio < 1.0:  # visible a propósito: una marca difusa se revisa
+            notes.append(f'entró por parecido: "{said}" ≈ "{hit}" ({ratio:.0%})')
         if len(text) <= len(hit) + MUTE_SLACK_CHARS:
             # el segmento es solo la marca: el beat empieza al terminarla
             anchors.append(float(seg["end"]))
@@ -124,7 +187,14 @@ def voice_marks(transcript: dict, phrases) -> tuple[list[float], set[float]]:
         else:
             # la dijiste pegada al contenido: el beat arranca ahí mismo
             anchors.append(float(seg["start"]))
-    return sorted(anchors), muted
+    # Los casi-marca solo se avisan si el video quedó SIN ninguna marca: ahí un
+    # falso negativo es el sospechoso obvio y el aviso trae el número exacto
+    # para recalibrar. Si ya marcaste bien, avisar de cada "esto es un
+    # problema" a 0.77 sería ruido que enseña a ignorar los avisos.
+    if not anchors:
+        near.sort(key=lambda n: n[0], reverse=True)
+        notes += [text for _, text in near[:MAX_NOTES]]
+    return sorted(anchors), muted, notes
 
 
 def load_marks(cfg, video_path: str | Path, transcript: dict) -> Marks:
@@ -132,7 +202,8 @@ def load_marks(cfg, video_path: str | Path, transcript: dict) -> Marks:
     if not cfg.get("marks.enabled", True):
         return Marks()
     phrases = cfg.get("marks.phrases") or DEFAULT_PHRASES
-    voice, muted = voice_marks(transcript, phrases)
+    similarity = cfg.get("marks.similarity", DEFAULT_SIMILARITY)
+    voice, muted, notes = voice_marks(transcript, phrases, similarity)
     from_file = file_marks(video_path)
     marks = Marks(anchors=sorted(voice + from_file), muted_starts=muted,
                   by_voice=len(voice), by_file=len(from_file))
@@ -143,6 +214,10 @@ def load_marks(cfg, video_path: str | Path, transcript: dict) -> Marks:
         if marks.by_file:
             detail.append(f"{marks.by_file} del archivo")
         print(f"  [marcas] {len(marks.anchors)} marca(s) tuyas ({', '.join(detail)})")
+    # los avisos se imprimen aunque no haya marcas: el caso que hay que ver es
+    # justamente "dije la frase y este video salió sin marcar"
+    for note in notes:
+        print(f"  [marcas] {note}")
     return marks
 
 

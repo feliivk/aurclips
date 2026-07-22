@@ -25,4 +25,14 @@ por perfil, sin modelar arcos narrativos.
   y el texto no dicen.
 - **La afinación va por datos, no por intuición.** Los pesos del selector se
   tocan mirando la sección "Qué está funcionando" de `aurclips report`, que
-  compara lo publicado por duración, tipo de gancho y origen.
+  compara lo publicado por duración, tipo de gancho y origen. Ese resumen
+  aparece también como cabecera de `aurclips review` —donde se decide— pero
+  solo con muestra suficiente: por debajo de 6 publicados no se muestra ninguna
+  comparación, porque un promedio con n=3 sesga la decisión justo cuando pesa.
+- **El volumen queda subordinado a la calidad.** El umbral relativo
+  `quality_floor` puede dejar un solo Short en un video con un único momento
+  fuerte (medido en datos sintéticos: 1 de 11 candidatos, en ambos perfiles),
+  así que la cadencia diaria depende de cuánto se marque al grabar. Es una
+  consecuencia buscada, no un efecto secundario; si el volumen resulta ser el
+  cuello de botella en corridas reales, el dial es `quality_floor` —los pesos
+  deciden *cuál* clip, el floor decide *cuántos*.

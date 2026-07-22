@@ -21,8 +21,13 @@ marks:
     - "esto es un short"
     - "esto va al short"
     - "marca aquí"
+  similarity: 0.85      # se comparan por parecido, no al pie de la letra: si un
+                        # día dices "esto es short" o Whisper escribe "shot", la
+                        # marca no se pierde (1.0 = exigir la frase literal)
   exclusive: true       # si el video trae marcas, solo se miran esas ventanas
-                        # (false = el resto del video sigue compitiendo)
+                        # (false = el resto del video sigue compitiendo).
+                        # OJO: un video SIN marcas no se ve afectado — se
+                        # selecciona normal, no se queda sin Shorts
   tolerance: 3.0        # holgura (seg) al emparejar una marca con una ventana
 
 # ------------------------------------------------------------
@@ -84,6 +89,13 @@ selection:
                         # puntuación del mejor (0 = desactivado); mejor
                         # pocos Shorts buenos que rellenar el cupo
                         # (lo que marcaste tú queda exento)
+                        #
+                        # ESTE ES EL DIAL DEL VOLUMEN. Es agresivo: en una
+                        # medición sintética dejó pasar 1 de 11 candidatos, o
+                        # sea ~1 Short por video sin marcar. Si con corridas
+                        # reales te rinde muy poco, BAJA ESTE NÚMERO (0.40),
+                        # no toques los pesos: los pesos deciden CUÁL clip,
+                        # este decide CUÁNTOS.
   min_clip_seconds: 15
   max_clip_seconds: 59
 
@@ -156,7 +168,9 @@ stats:
 
 alerts:
   discord_webhook: null   # URL de webhook de Discord para avisos (opcional)
-  notify_on: ["error", "uploaded"]  # eventos que generan aviso
+  notify_on: ["error", "uploaded", "review"]  # eventos que generan aviso
+                          # review = hay clips esperando tu aprobación; sin
+                          # este aviso la corrida de madrugada se queda muda
 
 # ------------------------------------------------------------
 # Publicación en YouTube

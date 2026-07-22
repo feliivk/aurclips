@@ -221,6 +221,39 @@ def learnings(db) -> list[str]:
     return lines
 
 
+def review_header(db) -> list[str]:
+    """Dos o tres líneas de "qué rinde", para la cabecera de ``review``.
+
+    En ``review`` estás decidiendo, no analizando: va solo el ganador de cada
+    dimensión, una línea cada uno. Y por debajo de :data:`MIN_SAMPLE` no se
+    muestra **ninguna** comparación: un promedio con n=3 sesga la decisión
+    justo en el momento en que más pesa ("los de 25 s rinden mejor" y empiezas
+    a descartar clips largos sin base).
+    """
+    rows = db.conn.execute(
+        "SELECT title, start, end, marked, views FROM clips "
+        "WHERE status = 'uploaded' AND views IS NOT NULL"
+    ).fetchall()
+    if len(rows) < MIN_SAMPLE:
+        return [f"(aún sin datos para guiarte: {len(rows)} Short(s) publicados "
+                f"de ~{MIN_SAMPLE}; decide con tu criterio)"]
+
+    lines = [f"Lo que mejor rinde en tus {len(rows)} Shorts publicados:"]
+    dimensions = [
+        ("duración", _duration_bucket),
+        ("gancho", _hook_kind),
+        ("origen", lambda r: "marcados por ti" if r["marked"] else "elegidos por el bot"),
+    ]
+    for label, label_of in dimensions:
+        groups = _avg_by(rows, label_of)
+        if len(groups) < 2:
+            continue  # un solo grupo no compara nada
+        top, n, avg = groups[0]
+        lines.append(f"  {label:<9} {top} ({n} shorts, "
+                     f"{_num(avg)} vistas de media)")
+    return lines
+
+
 def build_report(db) -> str:
     """Reporte de monitoreo en texto (español) para el comando ``report``.
 
