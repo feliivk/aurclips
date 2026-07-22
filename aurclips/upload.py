@@ -129,6 +129,13 @@ def upload_pending(cfg: Config, db: State) -> int:
         return 0
     print("[4/4] Subiendo clips a YouTube...")
     clips = db.clips_with_status("rendered")
+    # con revisión activada nada sale sin tu visto bueno (aurclips review)
+    if cfg.get("review.enabled", True):
+        pending = [c for c in clips if c["approved"] is None]
+        clips = [c for c in clips if c["approved"] == 1]
+        if pending:
+            print(f"  {len(pending)} clip(s) esperan revisión; corre "
+                  f"'python -m aurclips review' para aprobarlos")
     if not clips:
         print("  nada pendiente por subir")
         return 0

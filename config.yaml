@@ -1,6 +1,40 @@
 # ============================================================
 # Configuración de aurclips
+#
+# El proyecto se afina en tres puntos del flujo, no parámetro a parámetro:
+#   1. ARRIBA  — cómo grabas (marks): grabar en beats y marcarlos le gana a
+#                cualquier heurística. Es la palanca más grande.
+#   2. MEDIO   — el selector (selection.profile): mismo motor, calibrado a
+#                cómo suenas tú.
+#   3. ABAJO   — título (channel/titles) y medición (`report`): ahí es donde
+#                el canal mejora con el tiempo.
 # ============================================================
+
+# ------------------------------------------------------------
+# 1) ARRIBA — tus marcas al grabar
+#    Di la frase en voz alta mientras grabas, o deja un
+#    <video>.marks.txt al lado (lo escribe `aurclips mark`).
+# ------------------------------------------------------------
+marks:
+  enabled: true
+  phrases:              # frases gatillo: dilas y ese momento queda marcado
+    - "esto es un short"
+    - "esto va al short"
+    - "marca aquí"
+  exclusive: true       # si el video trae marcas, solo se miran esas ventanas
+                        # (false = el resto del video sigue compitiendo)
+  tolerance: 3.0        # holgura (seg) al emparejar una marca con una ventana
+
+# ------------------------------------------------------------
+# 3) ABAJO — tu canal: contexto para escribir los títulos
+# ------------------------------------------------------------
+channel:
+  angle: ""             # de qué va tu canal, en una línea
+                        # ej: "análisis tranquilo de videojuegos, sin gritos"
+  title_examples: []    # 3-5 títulos tuyos que te gusten: marcan la línea
+                        # editorial que el modelo debe imitar
+                        # - "Por qué nadie termina este juego"
+                        # - "El detalle que todos se saltan"
 
 # Canales de YouTube a vigilar (URL del canal o de su pestaña /videos)
 channels:
@@ -27,12 +61,21 @@ whisper:
   compute_type: "auto"  # auto elige lo mejor según el dispositivo
 
 # ------------------------------------------------------------
-# Selección de clips (100% local, sin API keys)
+# 2) MEDIO — selección de clips (100% local, sin API keys)
 # ------------------------------------------------------------
 selection:
-  engine: "auto"        # heuristic = solo análisis local de audio/texto
-                        # ollama    = un LLM local elige y escribe los títulos
-                        # auto      = usa Ollama si está corriendo, si no heurística
+  profile: "comentario" # calibración del selector a TU género:
+                        #   comentario = charla tranquila (análisis, podcast,
+                        #                tutorial): el volumen dice poco, manda
+                        #                cerrar la idea y la densidad
+                        #   gaming     = reacciones y streams: los picos de
+                        #                audio sí señalan el momento
+  weights: {}           # ajuste fino sobre el perfil; cada número es lo máximo
+                        # que esa señal mueve la puntuación. Ej:
+                        #   energy: 0.08
+                        #   closes: 0.32
+                        # señales: energy, pace, hook, punct, closes, density,
+                        #          filler, gaps, mark
   clips_per_video: 3    # tope máximo de Shorts por video largo
   minutes_per_short: 4  # densidad: ~1 Short por cada N minutos de video
                         # (el número real = duración/N, acotado por el tope;
@@ -40,11 +83,25 @@ selection:
   quality_floor: 0.55   # descarta candidatos bajo esta fracción de la
                         # puntuación del mejor (0 = desactivado); mejor
                         # pocos Shorts buenos que rellenar el cupo
+                        # (lo que marcaste tú queda exento)
   min_clip_seconds: 15
   max_clip_seconds: 59
-  ollama:
-    url: "http://localhost:11434"
-    model: "llama3.1:8b"
+
+# ------------------------------------------------------------
+# 3) ABAJO — títulos escritos por un LLM local y revisados por ti
+# ------------------------------------------------------------
+titles:
+  engine: "auto"        # heuristic = título sacado del propio clip (sin LLM)
+                        # ollama    = siempre pedírselo a Ollama
+                        # auto      = usa Ollama si está corriendo
+  model: "qwen2.5:7b"   # modelo de Ollama que redacta (alternativa ligera:
+                        # "gemma3:4b"). Instálalo con: ollama pull qwen2.5:7b
+  url: "http://localhost:11434"
+
+review:
+  enabled: true         # nada se sube sin tu visto bueno: `aurclips review`
+                        # muestra cada clip para aprobar, corregir o descartar
+                        # (false = pipeline 100% desatendido)
 
 # ------------------------------------------------------------
 # Edición / render

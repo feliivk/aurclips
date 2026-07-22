@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS clips (
     tags        TEXT,                      -- JSON
     text        TEXT,                      -- transcripción del clip (dedup/filtro)
     score       REAL,                      -- puntuación de la heurística
+    marked      INTEGER,                   -- 1 = lo marcaste tú al grabar
+    approved    INTEGER,                   -- NULL sin revisar | 1 aprobado | 0 descartado
     path        TEXT,
     status      TEXT NOT NULL DEFAULT 'pending',  -- pending|rendered|uploaded|flagged|failed
     publish_at  TEXT,
@@ -64,7 +66,8 @@ class State:
         existing = {r[1] for r in self.conn.execute("PRAGMA table_info(clips)")}
         for col, ddl in [("text", "TEXT"), ("score", "REAL"),
                          ("views", "INTEGER"), ("likes", "INTEGER"),
-                         ("stats_at", "TEXT")]:
+                         ("stats_at", "TEXT"), ("marked", "INTEGER"),
+                         ("approved", "INTEGER")]:
             if col not in existing:
                 self.conn.execute(f"ALTER TABLE clips ADD COLUMN {col} {ddl}")
 
@@ -102,15 +105,24 @@ class State:
     def add_clip(self, video_id: int, idx: int, start: float, end: float,
                  title: str, description: str, tags: list[str],
                  text: str | None = None, score: float | None = None,
-                 status: str = "pending") -> int:
+                 status: str = "pending", marked: bool = False) -> int:
         cur = self.conn.execute(
             "INSERT INTO clips (video_id, idx, start, end, title, description, tags,"
-            " text, score, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " text, score, marked, status, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (video_id, idx, start, end, title, description, json.dumps(tags),
-             text, score, status, _now()),
+             text, score, int(marked), status, _now()),
         )
         self.conn.commit()
         return cur.lastrowid
+
+    def clips_to_review(self) -> list[sqlite3.Row]:
+        """Clips renderizados que aún no has aprobado ni descartado."""
+        cur = self.conn.execute(
+            "SELECT * FROM clips WHERE status = 'rendered' AND approved IS NULL"
+            " ORDER BY video_id, idx"
+        )
+        return cur.fetchall()
 
     def update_clip(self, clip_id: int, **fields):
         cols = ", ".join(f"{k} = ?" for k in fields)

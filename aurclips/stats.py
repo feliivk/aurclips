@@ -147,6 +147,80 @@ def order_pending(db, clips: list) -> list:
     return sorted(clips, key=sort_key, reverse=True)
 
 
+def _num(value: float) -> str:
+    return f"{value:,.0f}".replace(",", ".")
+
+
+def _avg_by(rows, label_of) -> list[tuple[str, int, float]]:
+    """(etiqueta, nº de shorts, vistas medias) por grupo, de mejor a peor."""
+    groups: dict[str, list[int]] = {}
+    for row in rows:
+        groups.setdefault(label_of(row), []).append(row["views"] or 0)
+    out = [(label, len(v), sum(v) / len(v)) for label, v in groups.items() if v]
+    return sorted(out, key=lambda g: g[2], reverse=True)
+
+
+def _duration_bucket(row) -> str:
+    dur = (row["end"] or 0) - (row["start"] or 0)
+    if dur <= 20:
+        return "hasta 20 s"
+    if dur <= 35:
+        return "21-35 s"
+    if dur <= 50:
+        return "36-50 s"
+    return "más de 50 s"
+
+
+def _hook_kind(row) -> str:
+    from .heuristics import HOOK_WORDS
+
+    title = (row["title"] or "").lower()
+    if "?" in title or "¿" in title:
+        return "pregunta"
+    if any(w in title for w in HOOK_WORDS):
+        return "palabra gancho"
+    return "afirmación directa"
+
+
+MIN_SAMPLE = 6  # por debajo de esto los promedios son ruido, no señal
+
+
+def learnings(db) -> list[str]:
+    """Qué tienen en común los Shorts que rindieron: la afinación de verdad.
+
+    No se tunea por intuición. Esto compara lo ya publicado por duración, tipo
+    de gancho y origen (marcado por ti o elegido por el bot) para que ajustes
+    hacia donde apunten los datos, no hacia donde apunte la corazonada.
+    """
+    rows = db.conn.execute(
+        "SELECT title, start, end, marked, views, likes FROM clips "
+        "WHERE status = 'uploaded' AND views IS NOT NULL"
+    ).fetchall()
+    lines = ["", "Qué está funcionando:"]
+    if len(rows) < 3:
+        lines.append(f"  ({len(rows)} Short(s) con métricas; hacen falta unos "
+                     f"{MIN_SAMPLE} publicados para que esto diga algo)")
+        return lines
+
+    lines[-1] = f"Qué está funcionando ({len(rows)} Shorts con métricas):"
+    blocks = [
+        ("Por duración del clip", _duration_bucket),
+        ("Por gancho del título", _hook_kind),
+        ("Por origen", lambda r: "marcado por ti" if r["marked"] else "elegido por el bot"),
+    ]
+    for heading, label_of in blocks:
+        groups = _avg_by(rows, label_of)
+        if len(groups) < 2:
+            continue  # un solo grupo no compara nada
+        lines.append(f"  {heading}:")
+        for label, n, avg in groups:
+            lines.append(f"    {label:<20} {n:>3} shorts   "
+                         f"{_num(avg):>8} vistas de media")
+    if len(rows) < MIN_SAMPLE:
+        lines.append("  (muestra pequeña: léelo como una pista, no como veredicto)")
+    return lines
+
+
 def build_report(db) -> str:
     """Reporte de monitoreo en texto (español) para el comando ``report``.
 
@@ -182,6 +256,12 @@ def build_report(db) -> str:
             lines.append(f"  {r['status']:<14} {r['n']}")
     else:
         lines.append("  (ninguno)")
+
+    to_review = db.conn.execute(
+        "SELECT COUNT(*) AS n FROM clips WHERE status = 'rendered' AND approved IS NULL"
+    ).fetchone()["n"]
+    if to_review:
+        lines.append(f"  {'por revisar':<14} {to_review}  (python -m aurclips review)")
 
     # --- próximas publicaciones programadas -----------------------------
     lines.append("")
@@ -220,6 +300,9 @@ def build_report(db) -> str:
             )
     else:
         lines.append("  (sin datos de vistas todavía)")
+
+    # --- qué está funcionando (afinación por datos) ----------------------
+    lines += learnings(db)
 
     # --- clips con problemas --------------------------------------------
     problems = db.conn.execute(

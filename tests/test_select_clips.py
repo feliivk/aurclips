@@ -3,7 +3,7 @@
 Seam bajo test: select_clips (config + transcripción + ruta de video ->
 lista de Clips). Sin video real: ffprobe degrada a la duración de la
 transcripción y la energía de audio a neutra (contrato de test). Sin
-Ollama: engine "heuristic" y URL en puerto muerto por si acaso.
+Ollama: titles.engine "heuristic" y URL en puerto muerto por si acaso.
 """
 
 from pathlib import Path
@@ -18,13 +18,12 @@ from aurclips.select_clips import select_clips
 def _cfg(tmp_path: Path, paths: dict | None = None, **selection) -> Config:
     """Config mínima en tmp con la selección forzada a heurística pura."""
     sel = {
-        "engine": "heuristic",
         "min_clip_seconds": 15,
         "max_clip_seconds": 59,
-        "ollama": {"url": "http://127.0.0.1:9"},
     }
     sel.update(selection)
-    doc = {"selection": sel}
+    doc = {"selection": sel,
+           "titles": {"engine": "heuristic", "url": "http://127.0.0.1:9"}}
     if paths:
         doc["paths"] = paths
     path = tmp_path / "config.yaml"
@@ -220,6 +219,37 @@ def test_sin_corte_valido_se_conserva_el_final(tmp_path):
     assert len(clips) == 1
     assert clips[0].start_s == 60.0
     assert clips[0].end_s == 80.0
+
+
+# --- calibración por perfil / pesos -------------------------------------
+
+# dos zonas equivalentes en ritmo y densidad: A engancha pero no cierra la
+# idea; B cierra sin gancho. Cuál gana depende solo de los pesos.
+ENGANCHA = ("cuidado con este secreto increible del metodo nuevo",
+            "estrategias concretas resultados sorprendentes datos reales metodos probados")
+CIERRA = ("estrategias concretas resultados sorprendentes datos reales metodos probados",
+          "casos practicos utiles para cualquier canal grande enorme.")
+
+
+def test_sin_peso_al_cierre_gana_el_gancho(tmp_path):
+    cfg = _cfg(tmp_path, weights={"closes": 0.0})
+    clips = select_clips(cfg, _con_zonas(ENGANCHA, CIERRA), "gancho", NO_VIDEO)
+    assert len(clips) == 1
+    assert clips[0].start_s == 60.0
+
+
+def test_subir_el_peso_del_cierre_cambia_al_ganador(tmp_path):
+    # mismo video, mismo motor: solo se recalibró una señal
+    cfg = _cfg(tmp_path, weights={"closes": 0.9})
+    clips = select_clips(cfg, _con_zonas(ENGANCHA, CIERRA), "cierre", NO_VIDEO)
+    assert len(clips) == 1
+    assert clips[0].end_s == 200.0
+
+
+def test_perfil_desconocido_no_rompe(tmp_path):
+    # un perfil mal escrito degrada al default en vez de tumbar la corrida
+    cfg = _cfg(tmp_path, profile="no-existe", clips_per_video=2)
+    assert select_clips(cfg, _transcript(960), "perfil raro", NO_VIDEO)
 
 
 def test_sin_ventanas_utiles_no_salen_clips(tmp_path):

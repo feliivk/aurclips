@@ -2,6 +2,8 @@
 
 Uso:
     python -m aurclips run       # pipeline completo (ingesta -> proceso -> subida)
+    python -m aurclips mark      # marcar momentos en vivo mientras grabas
+    python -m aurclips review    # aprobar o corregir títulos antes de subir
     python -m aurclips ingest    # solo buscar/descargar contenido nuevo
     python -m aurclips process   # solo transcribir + seleccionar + renderizar
     python -m aurclips upload    # solo subir clips renderizados
@@ -97,7 +99,7 @@ def cmd_process(cfg: Config, db: State):
                             continue
                     db.add_clip(vid, i, c.start_s, c.end_s, c.title,
                                 c.description, c.hashtags, text=text,
-                                score=c.score, status=status)
+                                score=c.score, status=status, marked=c.marked)
                     added += 1
                 if not added:
                     print("  todos los clips fueron filtrados; video terminado")
@@ -119,6 +121,91 @@ def cmd_process(cfg: Config, db: State):
             db.update_video(vid, status="failed", error=str(e)[:500])
             from .notify import notify
             notify(cfg, "error", f"Falló el video '{title}': {str(e)[:200]}")
+
+
+def cmd_mark(cfg: Config, db: State, name: str | None = None):
+    """Sesión de marcado en vivo: cada Enter marca el instante actual."""
+    from .marks import record_session
+    record_session(cfg, name)
+
+
+def _show_clip(clip, tags: list[str]):
+    dur = clip["end"] - clip["start"]
+    star = " ★ marcado por ti" if clip["marked"] else ""
+    print(f"\n── clip #{clip['id']} · {clip['start']:.0f}s-{clip['end']:.0f}s "
+          f"({dur:.0f}s){star}")
+    print(f"   archivo: {clip['path']}")
+    print(f"   título:  {clip['title']}")
+    if clip["description"]:
+        print(f"   desc:    {clip['description'][:160]}")
+    if tags:
+        print(f"   tags:    {' '.join('#' + t for t in tags)}")
+
+
+def cmd_review(cfg: Config, db: State):
+    """Revisa y aprueba la metadata antes de que los clips se suban.
+
+    Son unos pocos al día: la herramienta propone y tú apruebas. Es el punto
+    donde tu criterio entra al pipeline sin tener que tocar código.
+    """
+    from . import titles
+
+    clips = db.clips_to_review()
+    if not clips:
+        print("No hay clips esperando revisión.")
+        return
+    llm = titles.enabled(cfg)
+    print(f"{len(clips)} clip(s) por revisar.")
+    print("[Enter] aprobar · [t] título · [d] descripción · "
+          f"{'[r] regenerar · ' if llm else ''}[x] descartar · [s] saltar · [q] salir")
+
+    approved = discarded = 0
+    for clip in clips:
+        tags = json.loads(clip["tags"] or "[]")
+        title, description = clip["title"], clip["description"]
+        _show_clip(clip, tags)
+        while True:
+            try:
+                choice = input("   > ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\nRevisión interrumpida; el resto queda pendiente.")
+                return
+            if choice in ("", "a", "ok"):
+                db.update_clip(clip["id"], approved=1, title=title,
+                               description=description, tags=json.dumps(tags))
+                approved += 1
+                break
+            if choice == "t":
+                new = input("     título: ").strip()
+                if new:
+                    title = new[:93]
+                    print(f"   título:  {title}")
+                continue
+            if choice == "d":
+                new = input("     descripción: ").strip()
+                if new:
+                    description = new
+                continue
+            if choice == "r" and llm:
+                proposal = titles.propose(cfg, clip["text"] or description, "")
+                if proposal:  # se guarda al aprobar, no antes
+                    title, description, tags = proposal
+                    print(f"   título:  {title}")
+                    print(f"   desc:    {description[:160]}")
+                continue
+            if choice == "x":
+                db.update_clip(clip["id"], approved=0)
+                discarded += 1
+                print("   descartado (no se subirá)")
+                break
+            if choice == "s":
+                break
+            if choice == "q":
+                print(f"\n{approved} aprobado(s), {discarded} descartado(s).")
+                return
+            print("   opciones: Enter / t / d / r / x / s / q")
+
+    print(f"\n{approved} aprobado(s), {discarded} descartado(s).")
 
 
 def cmd_upload(cfg: Config, db: State):
@@ -144,15 +231,22 @@ def cmd_status(cfg: Config, db: State):
         print(f"  #{r['id']:<4} {r['status']:<12} [{r['source']}] {r['title'] or ''} ({dur})")
     print("\n== Clips ==")
     rows = db.conn.execute(
-        "SELECT id, status, title, publish_at, youtube_id FROM clips ORDER BY id DESC LIMIT 20"
+        "SELECT id, status, title, publish_at, youtube_id, marked, approved"
+        " FROM clips ORDER BY id DESC LIMIT 20"
     ).fetchall()
     if not rows:
         print("  (ninguno)")
+    review_on = cfg.get("review.enabled", True)
     for r in rows:
         extra = ""
         if r["youtube_id"]:
             extra = f" -> https://youtu.be/{r['youtube_id']} @ {r['publish_at'] or '?'}"
-        print(f"  #{r['id']:<4} {r['status']:<10} {r['title'] or ''}{extra}")
+        elif r["approved"] == 0:
+            extra = " (descartado en revisión)"
+        elif review_on and r["status"] == "rendered" and r["approved"] is None:
+            extra = " (por revisar)"
+        star = "★" if r["marked"] else " "
+        print(f"  #{r['id']:<4} {star} {r['status']:<10} {r['title'] or ''}{extra}")
 
 
 def cmd_report(cfg: Config, db: State):
@@ -189,10 +283,15 @@ def cmd_run(cfg: Config, db: State):
     notify(cfg, "run",
            f"Corrida completa: {uploaded} clips subidos en total, {queued} en cola")
     print("\nCorrida completa.")
+    pending = len(db.clips_to_review())
+    if pending and cfg.get("review.enabled", True):
+        print(f"{pending} clip(s) esperan tu visto bueno: python -m aurclips review")
 
 
 COMMANDS = {
     "run": cmd_run,
+    "mark": cmd_mark,
+    "review": cmd_review,
     "ingest": cmd_ingest,
     "process": cmd_process,
     "upload": cmd_upload,
@@ -207,10 +306,15 @@ def main():
     parser = argparse.ArgumentParser(prog="aurclips", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=COMMANDS.keys())
+    parser.add_argument("name", nargs="?",
+                        help="nombre de la grabación (solo para 'mark')")
     args = parser.parse_args()
     cfg, db = _load()
     try:
-        COMMANDS[args.command](cfg, db)
+        if args.command == "mark":
+            cmd_mark(cfg, db, args.name)
+        else:
+            COMMANDS[args.command](cfg, db)
     except KeyboardInterrupt:
         print("\nInterrumpido.")
         sys.exit(130)

@@ -2,6 +2,12 @@
 
 No usa ninguna API. Analiza el audio con ffmpeg y la transcripción de Whisper
 para puntuar ventanas candidatas y generar título/descripción/hashtags.
+
+El motor es deliberadamente simple y honesto: no modela arcos narrativos ni
+persigue la viralidad, porque eso no se alcanza a punta de heurística. La
+narrativa se resuelve arriba (grabando en beats y marcándolos, ver
+``marks.py``) y la calidad se mide abajo (``stats.py``). Aquí solo se afina
+*a tu género* con los pesos de :class:`Weights`.
 """
 
 from __future__ import annotations
@@ -11,9 +17,10 @@ import re
 import subprocess
 from array import array
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .config import Config
+from .marks import Marks
 
 ENERGY_WINDOW = 0.5  # segundos por ventana de energía
 
@@ -45,6 +52,13 @@ FILLER_STARTS = (
     "pues ", "a ver ", "vale ", "ok ", "and ", "but ", "so ", "well ", "um ",
     "uh ", "like ",
 )
+
+# Genéricos que no aportan como hashtag aunque sean frecuentes
+GENERIC_TAGS = {
+    "video", "videos", "clip", "clips", "short", "shorts", "canal", "gente",
+    "cosas", "cosa", "tema", "temas", "parte", "momento", "momentos", "hoy",
+    "manera", "forma", "vida", "mundo", "channel", "stuff", "thing",
+}
 
 STOPWORDS = {
     # español
@@ -86,6 +100,7 @@ class Candidate:
     end: float
     score: float
     segments: list = field(default_factory=list)
+    marked: bool = False  # cae sobre una marca tuya (ver marks.py)
 
     @property
     def text(self) -> str:
@@ -94,6 +109,12 @@ class Candidate:
     @property
     def duration(self) -> float:
         return self.end - self.start
+
+
+def _far_enough(a: Candidate, b: Candidate) -> bool:
+    """¿Dos candidatos pueden convivir? Los marcados solo piden no traslaparse."""
+    gap = 0.0 if (a.marked and b.marked) else MIN_GAP_S
+    return a.end + gap <= b.start or a.start >= b.end + gap
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +168,61 @@ def _percentile_ranks(values: list[float]) -> list[float]:
 
 
 # ---------------------------------------------------------------------------
+# Pesos: el mismo motor, afinado a cómo suenas tú
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Weights:
+    """Cuánto puede aportar (o restar) cada señal a la puntuación final.
+
+    Cada campo es el **máximo** que esa señal mueve la aguja, así que se leen
+    y se comparan directamente: si ``closes`` > ``energy``, cerrar la idea
+    importa más que el volumen.
+    """
+
+    energy: float    # picos de audio (rango percentil de la ventana)
+    pace: float      # ritmo de habla contra la mediana del video
+    hook: float      # palabras gancho en los primeros 8 s
+    punct: float     # preguntas y exclamaciones
+    closes: float    # el clip termina cerrando la idea
+    density: float   # fracción de palabras con contenido (no muletillas)
+    filler: float    # penalización: arranca con muletilla
+    gaps: float      # penalización: silencios muertos dentro de la ventana
+    mark: float      # tú marcaste ese momento al grabar (ver marks.py)
+
+    @classmethod
+    def from_config(cls, cfg: Config) -> "Weights":
+        name = cfg.get("selection.profile", "comentario")
+        base = PROFILES.get(name)
+        if base is None:
+            print(f"  [selector] perfil '{name}' desconocido; se usa 'comentario'")
+            base = PROFILES["comentario"]
+        overrides = cfg.get("selection.weights") or {}
+        known = {k: float(v) for k, v in overrides.items()
+                 if k in cls.__dataclass_fields__}
+        unknown = set(overrides) - set(cls.__dataclass_fields__)
+        if unknown:  # un typo en la config no debe fallar en silencio
+            print(f"  [selector] pesos desconocidos, ignorados: "
+                  f"{', '.join(sorted(unknown))}")
+        return replace(base, **known) if known else base
+
+
+PROFILES: dict[str, Weights] = {
+    # Charla tranquila (comentario, análisis, podcast, tutorial): no gritas,
+    # así que el volumen dice poco de dónde está lo bueno. Manda que la idea
+    # cierre y que haya contenido real, no relleno conversacional.
+    "comentario": Weights(energy=0.12, pace=0.15, hook=0.35, punct=0.15,
+                          closes=0.28, density=0.22, filler=0.15, gaps=0.40,
+                          mark=0.50),
+    # Gaming, reacciones, streams: ahí los picos de audio sí señalan el
+    # momento (risas, gritos, subidas de intensidad).
+    "gaming": Weights(energy=0.30, pace=0.20, hook=0.30, punct=0.15,
+                      closes=0.18, density=0.12, filler=0.12, gaps=0.40,
+                      mark=0.50),
+}
+
+
+# ---------------------------------------------------------------------------
 # Puntuación de ventanas candidatas
 # ---------------------------------------------------------------------------
 
@@ -160,38 +236,38 @@ def _window_energy(ranks: list[float], start: float, end: float) -> float:
 
 
 def _score_window(segs: list[dict], energy_ranks: list[float],
-                  median_pace: float) -> float:
+                  median_pace: float, w: Weights, marked: bool = False) -> float:
     start, end = segs[0]["start"], segs[-1]["end"]
     dur = max(0.1, end - start)
     text = " ".join(s["text"] for s in segs).lower()
 
-    energy = _window_energy(energy_ranks, start, end)
+    energy = w.energy * _window_energy(energy_ranks, start, end)
 
     n_words = sum(len(s["words"]) for s in segs)
-    pace = min(2.0, (n_words / dur) / max(0.1, median_pace)) / 2.0
+    pace = w.pace * min(2.0, (n_words / dur) / max(0.1, median_pace)) / 2.0
 
     first_8s = " ".join(s["text"] for s in segs if s["start"] < start + 8).lower()
-    hook_hits = sum(1 for w in HOOK_WORDS if w in first_8s)
-    hook = min(0.3, hook_hits * 0.15)
+    hook_hits = sum(1 for word in HOOK_WORDS if word in first_8s)
+    hook = min(w.hook, hook_hits * w.hook / 2)
 
-    punct = min(0.15, (text.count("?") + text.count("!")) * 0.05)
+    punct = min(w.punct, (text.count("?") + text.count("!")) * w.punct / 3)
 
     gaps = 0.0
     for prev, nxt in zip(segs, segs[1:]):
         gaps += max(0.0, nxt["start"] - prev["end"] - 1.0)
-    gap_penalty = min(0.4, gaps / dur)
+    gap_penalty = min(w.gaps, gaps / dur)
 
-    # cerrar la idea pesa fuerte: un clip que muere a mitad de frase se
-    # siente roto aunque el momento sea bueno
-    closes_sentence = 0.18 if _ends_sentence(text) else 0.0
+    # cerrar la idea: un clip que muere a mitad de frase se siente roto
+    # aunque el momento sea bueno
+    closes_sentence = w.closes if _ends_sentence(text) else 0.0
 
     # arrancar con muletilla desperdicia el primer segundo del Short
-    filler_pen = 0.12 if text.lstrip().startswith(FILLER_STARTS) else 0.0
+    filler_pen = w.filler if text.lstrip().startswith(FILLER_STARTS) else 0.0
 
     # densidad de contenido: fracción de palabras significativas (no
     # stopwords); el relleno conversacional puro no merece un Short
     tokens = re.findall(r"[a-záéíóúüñ]+", text)
-    density = (min(0.12, 0.25 * len(_significant_words(text)) / len(tokens))
+    density = (w.density * min(1.0, 2 * len(_significant_words(text)) / len(tokens))
                if tokens else 0.0)
 
     # duración óptima según la investigación: 15-30s retiene mejor; la
@@ -203,21 +279,27 @@ def _score_window(segs: list[dict], energy_ranks: list[float],
     else:
         dur_bonus = -0.05
 
-    # la energía manda menos que antes (0.45 -> 0.30): lo ruidoso no es
-    # necesariamente lo interesante; la estructura narrativa pesa más
-    return (0.30 * energy + 0.2 * pace + hook + punct + closes_sentence
-            + dur_bonus + density - gap_penalty - filler_pen)
+    # tu marca gana a cualquier heurística: si señalaste el momento al
+    # grabar, sabes algo que el audio y el texto no dicen
+    mark_bonus = w.mark if marked else 0.0
+
+    return (energy + pace + hook + punct + closes_sentence + dur_bonus
+            + density + mark_bonus - gap_penalty - filler_pen)
 
 
 def find_candidates(cfg: Config, transcript: dict, video_path: str,
-                    limit: int) -> list[Candidate]:
+                    limit: int, marks: Marks | None = None) -> list[Candidate]:
     """Devuelve las mejores ventanas candidatas, sin traslapes."""
     min_s = cfg.get("selection.min_clip_seconds", 15)
     max_s = cfg.get("selection.max_clip_seconds", 59)
-    segs = [s for s in transcript["segments"] if s["words"]]
+    marks = marks or Marks()
+    tolerance = cfg.get("marks.tolerance", 3.0)
+    segs = [s for s in transcript["segments"]
+            if s["words"] and float(s["start"]) not in marks.muted_starts]
     if not segs:
         return []
 
+    weights = Weights.from_config(cfg)
     print("  [selector] analizando energía del audio...")
     energy_ranks = _percentile_ranks(audio_energy(cfg, video_path))
 
@@ -233,21 +315,32 @@ def find_candidates(cfg: Config, transcript: dict, video_path: str,
             dur = segs[j]["end"] - segs[i]["start"]
             if dur >= min_s:
                 window = segs[i:j + 1]
-                score = _score_window(window, energy_ranks, median_pace)
+                marked = marks.covers(segs[i]["start"], segs[j]["end"], tolerance)
+                score = _score_window(window, energy_ranks, median_pace,
+                                      weights, marked)
                 if best is None or score > best.score:
-                    best = Candidate(segs[i]["start"], segs[j]["end"], score, window)
+                    best = Candidate(segs[i]["start"], segs[j]["end"], score,
+                                     window, marked=marked)
             j += 1
         if best:
             windows.append(best)
 
-    # selección voraz sin traslapes y con separación mínima
+    # si marcaste el video, esas ventanas son el material: el resto sobra
+    if marks and cfg.get("marks.exclusive", True):
+        only_marked = [c for c in windows if c.marked]
+        if only_marked:
+            print(f"  [marcas] {len(only_marked)} ventana(s) sobre tus marcas; "
+                  f"se ignora el resto del video (marks.exclusive)")
+            windows = only_marked
+
+    # selección voraz sin traslapes y con separación mínima; entre dos clips
+    # marcados basta con que no se traslapen (marcaste los dos a propósito)
     windows.sort(key=lambda c: c.score, reverse=True)
     chosen: list[Candidate] = []
     for cand in windows:
         if len(chosen) >= limit:
             break
-        if all(cand.end + MIN_GAP_S <= c.start or cand.start >= c.end + MIN_GAP_S
-               for c in chosen):
+        if all(_far_enough(cand, c) for c in chosen):
             chosen.append(cand)
     chosen.sort(key=lambda c: c.start)
 
@@ -269,7 +362,7 @@ def find_candidates(cfg: Config, transcript: dict, video_path: str,
 
 
 # ---------------------------------------------------------------------------
-# Metadatos sin LLM
+# Metadatos sin LLM (respaldo: con Ollama los escribe titles.py)
 # ---------------------------------------------------------------------------
 
 def _clean_title(text: str, max_len: int = 85) -> str:
@@ -286,16 +379,71 @@ def _clean_title(text: str, max_len: int = 85) -> str:
     return text[:1].upper() + text[1:] if text else "Clip"
 
 
+def split_sentences(text: str) -> list[str]:
+    """Frases del clip, sin los fragmentos vacíos."""
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _sentence_appeal(sentence: str) -> tuple[int, int]:
+    """Prioridad de una frase como título: (gancho, contenido)."""
+    lowered = sentence.lower()
+    if any(w in lowered for w in HOOK_WORDS):
+        rank = 3
+    elif "?" in sentence or "¿" in sentence or "!" in sentence or "¡" in sentence:
+        rank = 2
+    elif len(_significant_words(sentence)) >= 3:
+        rank = 1
+    else:
+        rank = 0
+    return rank, len(_significant_words(sentence))
+
+
+def best_sentence(text: str, used: set[str] | None = None) -> str:
+    """La frase con más gancho del clip — no la primera por ser la primera.
+
+    La primera frase casi nunca es la que engancha: suele ser el arranque de
+    la idea, no su filo. Se prefiere la que trae palabra gancho, luego la
+    pregunta/exclamación, y solo al final se cae en el orden original.
+    """
+    sentences = split_sentences(text)
+    if not sentences:
+        return ""
+    used = used or set()
+    fresh = [s for s in sentences
+             if _clean_title(s).lower() not in used] or sentences
+    return max(fresh, key=lambda s: (_sentence_appeal(s), -fresh.index(s)))
+
+
+def _description(text: str, max_len: int = 220) -> str:
+    """Primeras frases completas del clip (nunca un corte a media palabra)."""
+    out = ""
+    for sentence in split_sentences(text):
+        if out and len(out) + 1 + len(sentence) > max_len:
+            break
+        out = f"{out} {sentence}".strip()
+        if len(out) >= max_len * 0.6:
+            break
+    if out:
+        return out
+    text = text.strip()
+    return text[:max_len].rsplit(" ", 1)[0] + "…" if len(text) > max_len else text
+
+
 def _hashtags(text: str, limit: int = 4) -> list[str]:
-    freq = Counter(_significant_words(text))
+    freq = Counter(w for w in _significant_words(text) if w not in GENERIC_TAGS)
     return [w for w, _ in freq.most_common(limit)]
 
 
-def make_metadata(cand: Candidate) -> tuple[str, str, list[str]]:
-    """(título, descripción, hashtags) generados a partir del propio clip."""
+def make_metadata(cand: Candidate,
+                  used_titles: set[str] | None = None) -> tuple[str, str, list[str]]:
+    """(título, descripción, hashtags) generados a partir del propio clip.
+
+    ``used_titles`` (en minúsculas) evita que dos clips del mismo video salgan
+    con el mismo título.
+    """
     from .safety import strip_mild  # título sin groserías (política de títulos)
 
-    title = _clean_title(strip_mild(cand.segments[0]["text"]))
     text = cand.text.strip()
-    description = text[:220].rsplit(" ", 1)[0] + "…" if len(text) > 220 else text
-    return title, description, _hashtags(cand.text)
+    title = _clean_title(strip_mild(best_sentence(text, used_titles)))
+    return title, _description(text), _hashtags(text)
