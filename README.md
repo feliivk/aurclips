@@ -172,8 +172,16 @@ pipeline sin tocar código.
 `report` trae vistas/likes de tus Shorts publicados y añade una sección **"Qué
 está funcionando"**: vistas medias por duración del clip, por tipo de gancho del
 título y según si lo marcaste tú o lo eligió el bot. Ajusta los pesos hacia
-donde apunten esos números. Además, la cola de subida da prioridad a los clips
-de los videos fuente que mejor han rendido.
+donde apunten esos números. Un resumen de tres líneas sale también como
+cabecera de `review` —donde decides—, y solo con muestra suficiente: por debajo
+de ~6 publicados no se muestra ninguna comparación, porque un promedio con n=3
+sesga la decisión justo cuando más pesa. Además, la cola de subida da prioridad
+a los clips de los videos fuente que mejor han rendido.
+
+> **Cómo NO leerlo**: que "marcados por ti" rinda mejor no prueba que marcar
+> mejore el rendimiento. Marcas los que ya te parecen buenos, así que la marca
+> y la calidad salen del mismo sitio: tu criterio. Eso es selección, no
+> causalidad — mide tu ojo, no el sistema de marcas.
 
 **Alertas:** cada corrida escribe en `logs\events.log`. Si pones una URL de
 webhook de Discord en `alerts.discord_webhook` (config.yaml), recibes un aviso

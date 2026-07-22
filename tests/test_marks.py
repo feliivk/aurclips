@@ -11,7 +11,8 @@ from pathlib import Path
 import yaml
 
 from aurclips.config import Config
-from aurclips.marks import match_phrase, normalize, parse_timecode, sidecar_path
+from aurclips.marks import (DEFAULT_PHRASES, match_phrase, normalize,
+                            parse_timecode, phrase_similarity, sidecar_path)
 from aurclips.select_clips import select_clips
 
 
@@ -158,7 +159,56 @@ def test_parecido_de_la_frase_gatillo():
     assert match_phrase(normalize("esto es un problema"), gatillo, 0.85) == 0.0
 
 
-CASI = "Esto va a ser un short."  # 0.79: variante real que se queda corta
+# --- negar no es marcar -------------------------------------------------
+
+def test_negar_la_frase_no_marca(tmp_path):
+    # "esto no es un short" se parece un 91% a la frase gatillo siendo lo
+    # contrario: ningún umbral separa eso, hace falta mirar la negación
+    cfg = _cfg(tmp_path, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase("Esto no es un short."), "negada",
+                         _video(tmp_path))
+    assert not clips[0].marked
+
+
+def test_la_negacion_fuera_de_la_frase_no_estorba(tmp_path):
+    # el "no" está en la ventana equivocada: marcaste y se respeta
+    cfg = _cfg(tmp_path, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase("Esto es un short, no te lo pierdas."),
+                         "marca con no", _video(tmp_path))
+    assert clips[0].marked
+
+
+def test_decir_el_gatillo_literal_no_salta_el_guard(tmp_path, capsys):
+    # "nada de esto es un short" contiene la frase EXACTA: sin el guard en el
+    # atajo de coincidencia literal, marcaría al 100%
+    cfg = _cfg(tmp_path, clips_per_video=1)
+    clips = select_clips(cfg, _con_frase("Nada de esto es un short."),
+                         "literal negada", _video(tmp_path))
+    assert not clips[0].marked
+    # y no se descarta en silencio: el video quedó sin marcas y dice por qué
+    assert "descartada por negación" in capsys.readouterr().out
+
+
+def test_la_negacion_se_descarta_sin_importar_el_umbral():
+    gatillo = normalize("esto es un short")
+    # el parecido crudo sigue disponible para calibrar...
+    assert phrase_similarity(normalize("esto no es un short"), gatillo) > 0.85
+    # ...pero la decisión no depende del umbral en este caso
+    for umbral in (0.60, 0.75, 0.85):
+        assert match_phrase(normalize("esto no es un short"), gatillo, umbral) == 0.0
+        assert match_phrase(normalize("esto nunca va a ser un short"),
+                            gatillo, umbral) == 0.0
+
+
+def test_las_variantes_del_gatillo_vienen_de_fabrica():
+    # el fraseo que no marca se agrega a la lista; no se baja el umbral
+    for variante in ("esto va a ser un short", "este es el short",
+                     "esto va para short"):
+        assert max(match_phrase(normalize(variante), normalize(p), 0.85)
+                   for p in DEFAULT_PHRASES) == 1.0
+
+
+CASI = "Esto va a ser un short."  # 0.79 contra "esto es un short" a secas
 
 
 def test_el_casi_marca_avisa_con_el_numero_crudo(tmp_path, capsys):

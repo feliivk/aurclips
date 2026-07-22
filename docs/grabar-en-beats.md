@@ -44,11 +44,24 @@ clip pero no entra en él. Las frases se configuran en `marks.phrases`.
 
 No hace falta decirla clavada: se comparan **por parecido** (`marks.similarity`,
 0.85 por defecto), así que "esto es short" o un "shot" mal transcrito siguen
-marcando. Mencionar el tema de pasada no dispara nada — *"no todo lo que grabo
-es un short"* no marca. Cuando una marca entra por parecido y no literal, la
-corrida lo dice en pantalla, para que veas si el gatillo se te está disparando
-solo. Si quieres máxima precisión, usa un gatillo corto y distinto de tu habla
-normal ("marca aquí") en vez de una frase larga.
+marcando. **Negar nunca marca**: *"esto no es un short"* se parece un 91% a la
+frase gatillo y aun así se descarta, igual que *"nada de esto va para short"*
+aunque contenga el gatillo literal. La regla es direccional —una negación
+*antes* de la frase la anula, una *después* no—, así que *"esto es un short, no
+te lo pierdas"* marca sin problema.
+
+**Si un fraseo tuyo no marcó, agrégalo a `marks.phrases`; no bajes
+`similarity`.** Es la diferencia entre arreglar el caso y abrir la puerta: una
+variante nueva coincide al 100%, mientras que bajar el umbral acerca los falsos
+positivos. Está medido: *"esto va a ser un short"* (legítima) daba 0.79 y *"no
+todo lo que grabo es un short"* (trampa) 0.81 — están invertidas, así que no
+hay umbral que las separe. Por eso la lista trae varias variantes de fábrica.
+
+Cuando una marca entra por parecido y no literal, la corrida lo dice en
+pantalla. Y si un video termina **sin ninguna marca**, se imprime lo que estuvo
+cerca —con el número exacto que le faltó— o lo que se descartó por negación:
+así el fallo se ve en vez de desaparecer. Para máxima precisión, usa un gatillo
+corto y distinto de tu habla normal ("marca aquí") dicho como frase suelta.
 
 **Por hotkey o archivo:** deja un `<video>.marks.txt` junto a la grabación, un
 tiempo por línea (`12:34`, `1:02:03` o segundos sueltos). Sirve cualquier cosa

@@ -17,13 +17,19 @@
 # ------------------------------------------------------------
 marks:
   enabled: true
-  phrases:              # frases gatillo: dilas y ese momento queda marcado
-    - "esto es un short"
-    - "esto va al short"
+  phrases:              # frases gatillo: dilas y ese momento queda marcado.
+    - "esto es un short"   # ¿un fraseo tuyo no marcó? AGRÉGALO AQUÍ; es más
+    - "esto va a ser un short"  # seguro que bajar 'similarity': una variante
+    - "esto va al short"   # nueva coincide al 100% sin acercar el umbral a
+    - "este es el short"   # los falsos positivos
+    - "va para short"
     - "marca aquí"
+    - "clip esto"
   similarity: 0.85      # se comparan por parecido, no al pie de la letra: si un
                         # día dices "esto es short" o Whisper escribe "shot", la
-                        # marca no se pierde (1.0 = exigir la frase literal)
+                        # marca no se pierde (1.0 = exigir la frase literal).
+                        # Negar nunca marca: "esto NO es un short" se parece un
+                        # 91% y aun así se descarta
   exclusive: true       # si el video trae marcas, solo se miran esas ventanas
                         # (false = el resto del video sigue compitiendo).
                         # OJO: un video SIN marcas no se ve afectado — se

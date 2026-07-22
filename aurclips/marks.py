@@ -25,14 +25,26 @@ import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Nadie dice el gatillo igual dos veces. Ante un fraseo que no marcó, la
+# respuesta es AGREGARLO AQUÍ, no bajar `marks.similarity`: una variante nueva
+# se vuelve coincidencia exacta sin acercar el umbral a los falsos positivos.
 DEFAULT_PHRASES = (
     "esto es un short",
+    "esto va a ser un short",
     "esto va al short",
+    "este es el short",
+    "va para short",
     "marca aqui",
     "clip esto",
     "this is a short",
     "clip that",
 )
+
+# La similitud de caracteres no distingue afirmar de negar: "esto no es un
+# short" se parece un 91% a "esto es un short" siendo justo lo contrario, y
+# ningún umbral separa eso (la variante legítima puntúa MENOS que la negación).
+# Lo que dos letras no pueden decidir, una palabra sí.
+NEGATIONS = {"no", "nunca", "tampoco", "jamas", "nada"}
 
 # un segmento que solo es la frase gatillo se silencia; si dijiste la frase
 # pegada al contenido, se conserva (perder texto real cuesta más que colar
@@ -113,41 +125,66 @@ def file_marks(video_path: str | Path) -> list[float]:
     return sorted(times)
 
 
-def _best_ratio(tokens: list[str], phrase: str) -> float:
-    """Mejor parecido entre la frase y una ventana de palabras del segmento.
+def _best_window(tokens: list[str], phrase: str) -> tuple[float, int, int]:
+    """(parecido, inicio, tamaño) del trozo del segmento más parecido a la frase.
 
     Se prueban ventanas de una palabra menos, iguales y una más que la frase,
     para tolerar tanto que te comas una palabra como que metas una de más.
     """
     n = len(phrase.split())
-    best = 0.0
+    best = (0.0, 0, n)
     for size in {max(1, n - 1), n, n + 1}:
         for i in range(max(1, len(tokens) - size + 1)):
             window = " ".join(tokens[i:i + size])
             if window:
-                best = max(best, difflib.SequenceMatcher(None, window, phrase).ratio())
+                ratio = difflib.SequenceMatcher(None, window, phrase).ratio()
+                if ratio > best[0]:
+                    best = (ratio, i, size)
     return best
 
 
-def phrase_similarity(text: str, phrase: str) -> float:
-    """Parecido crudo (0..1) entre el texto normalizado y la frase gatillo.
+def trigger_match(text: str, phrase: str) -> tuple[float, bool]:
+    """(parecido crudo 0..1, ¿está negada?) del texto normalizado vs la frase.
 
-    Es el número con el que se calibra ``marks.similarity``, así que se expone
-    sin recortar: el umbral se aplica fuera.
+    La negación no se busca a una distancia fija sino en una **dirección**: en
+    español niega hacia adelante, así que cuenta todo lo que va desde el inicio
+    de la frase hasta el final de la ventana que coincidió. "Esto nunca va a
+    ser un short" queda descartado aunque el "nunca" caiga tres palabras antes
+    de la coincidencia; "esto es un short, no te lo pierdas" marca igual,
+    porque ahí el "no" viene después. La regla vale también cuando la frase
+    coincide literal: decir el gatillo exacto no salta el guard, o "nada de
+    esto va para short" marcaría al 100%.
     """
-    if phrase in text:
-        return 1.0
-    return _best_ratio(text.split(), phrase)
+    phrase_tokens = phrase.split()
+    tokens = text.split()
+    exact = text.find(phrase)
+    if exact >= 0:  # dicha literal: el alcance es lo que va antes de la frase
+        ratio, scope = 1.0, text[:exact].split()
+    else:
+        ratio, start, size = _best_window(tokens, phrase)
+        scope = tokens[:start + size]
+    negated = (any(w in NEGATIONS for w in scope)
+               and not any(w in NEGATIONS for w in phrase_tokens))
+    return ratio, negated
+
+
+def phrase_similarity(text: str, phrase: str) -> float:
+    """Parecido crudo, sin recortar: el número con el que se calibra el umbral.
+
+    Ignora la negación a propósito — es la medición, no la decisión. Para
+    decidir, :func:`match_phrase`.
+    """
+    return trigger_match(text, phrase)[0]
 
 
 def match_phrase(text: str, phrase: str, threshold: float) -> float:
-    """El parecido si pasa el umbral, 0.0 si no. Puerta, no medición.
+    """El parecido si dispara el gatillo, 0.0 si no. Puerta, no medición.
 
     Así una marca no se pierde porque ese día dijeras "esto es short" en vez de
-    "esto es un short". Para el número crudo, :func:`phrase_similarity`.
+    "esto es un short", y una negación no marca por parecerse.
     """
-    ratio = phrase_similarity(text, phrase)
-    return ratio if ratio >= threshold else 0.0
+    ratio, negated = trigger_match(text, phrase)
+    return 0.0 if negated or ratio < threshold else ratio
 
 
 def voice_marks(transcript: dict, phrases,
@@ -165,12 +202,20 @@ def voice_marks(transcript: dict, phrases,
         text = normalize(seg.get("text", ""))
         if not text:
             continue
-        hit, ratio = "", 0.0
+        hit, ratio, blocked = "", 0.0, ""
         for phrase in wanted:
-            score = phrase_similarity(text, phrase)
+            score, negated = trigger_match(text, phrase)
+            if negated:  # negar no es marcar, por mucho que se parezca
+                if score >= similarity and not blocked:
+                    blocked = phrase
+                continue
             if score > ratio:
                 hit, ratio = phrase, score
         said = seg.get("text", "").strip()
+        if blocked and not hit:
+            near.append((similarity, f'descartada por negación: "{said}" '
+                                     f'(se parece a "{blocked}" pero la niega)'))
+            continue
         if ratio < similarity:
             # el falso negativo es el caso que importa calibrar: si dijiste la
             # frase y no marcó, aquí está el número exacto que le faltó
