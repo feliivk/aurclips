@@ -96,11 +96,21 @@ def propose(cfg: Config, clip_text: str,
         parts += [f"Video de origen: {video_title}", ""]
     parts += ["Transcripción completa del clip:", clip_text.strip()]
 
+    # temperatura y seed configurables: con titles.seed fijo (y la temperatura
+    # que sea), Ollama repite la misma propuesta para el mismo clip — es lo
+    # que hace reproducible la única pieza del pipeline con LLM. El default
+    # sigue siendo creativo (sin seed).
+    options = {"num_ctx": 8192,
+               "temperature": cfg.get("titles.temperature", 0.7)}
+    seed = cfg.get("titles.seed")
+    if seed is not None:
+        options["seed"] = int(seed)
+
     payload = json.dumps({
         "model": model,
         "stream": False,
         "format": Proposal.model_json_schema(),
-        "options": {"num_ctx": 8192, "temperature": 0.7},
+        "options": options,
         "messages": [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": "\n".join(parts)},

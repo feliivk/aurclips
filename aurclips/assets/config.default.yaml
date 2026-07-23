@@ -115,6 +115,10 @@ titles:
   model: "qwen2.5:7b"   # modelo de Ollama que redacta (alternativa ligera:
                         # "gemma3:4b"). Instálalo con: ollama pull qwen2.5:7b
   url: "http://localhost:11434"
+  temperature: 0.7      # creatividad del redactor (0 = siempre lo más probable)
+  seed: null            # fija un número (ej. 42) y la propuesta se vuelve
+                        # reproducible: mismo clip -> mismo título en cada
+                        # corrida. null = variedad entre corridas
 
 review:
   enabled: true         # nada se sube sin tu visto bueno: `aurclips review`

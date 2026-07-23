@@ -215,7 +215,8 @@ def test_requeue_devuelve_la_grabacion_tan_atras_como_haga_falta():
     db.video_failed(lost, "se borró la transcripción")
     assert [r["id"] for r in db.videos_to_process()] == [fresh, done]
 
-    assert db.requeue_failed(lambda video_id: video_id == kept) == 2
+    assert db.requeue_failed(lambda video_id: video_id == kept,
+                             lambda path: True) == 2
     # los progresos se comparan contra dos grabaciones de referencia: el test
     # afirma a dónde volvió cada una sin nombrar lo que solo sabe state.py
     rows = {r["id"]: r for r in db.recent_videos()}
@@ -240,7 +241,9 @@ def test_requeue_devuelve_el_clip_hasta_donde_le_falte_el_archivo():
     db.clip_failed(unreviewed, "falló la subida")
     db.clip_failed(lost, "se borró el render")  # nunca llegó a tener archivo
 
-    assert db.requeue_failed(lambda _: True) == 3
+    # el render de 'lost' no existe en disco; los otros dos sí
+    assert db.requeue_failed(lambda _: True,
+                             lambda path: path in ("a.mp4", "b.mp4")) == 3
     assert [r["id"] for r in db.clips_to_upload(require_review=True)] == [approved]
     assert [r["id"] for r in db.clips_to_review()] == [unreviewed]
     assert [r["id"] for r in db.clips_to_render(video_id)] == [lost]

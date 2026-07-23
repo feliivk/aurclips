@@ -71,7 +71,12 @@ def cmd_process(cfg: Config, db: State):
                 transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
 
             # --- seleccionar clips -------------------------------------
-            if db.needs_selection(video):
+            # la guarda de clips existentes evita re-seleccionar tras una
+            # corrida muerta a medias: con clips ya en la base, el dedup los
+            # tacharía todos de duplicados y los pendientes quedarían
+            # huérfanos con el video mintiendo 'done'; lo que toca es
+            # saltar directo a renderizarlos
+            if db.needs_selection(video) and not db.video_has_clips(vid):
                 print(f"[3/4] Seleccionando clips: {title}")
                 clips = select_clips(cfg, transcript, title, video["path"])
                 if not clips:
@@ -279,7 +284,10 @@ def cmd_retry(cfg: Config, db: State):
     def has_transcript(video_id: int) -> bool:
         return (cfg.work_dir / f"video_{video_id}" / "transcript.json").exists()
 
-    n = db.requeue_failed(has_transcript)
+    def render_exists(path: str) -> bool:
+        return Path(path).exists()
+
+    n = db.requeue_failed(has_transcript, render_exists)
     print(f"{n} elemento(s) reencolados. Corre 'run' para reintentarlos.")
 
 

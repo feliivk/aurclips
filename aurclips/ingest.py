@@ -18,6 +18,22 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
+# Firmas de "no hay internet" en el stderr de yt-dlp. Sin esto, el mensaje al
+# usuario sería el boilerplate de "report this issue on github" — que sugiere
+# un bug cuando lo que pasa es que se cayó la red.
+_NETWORK_SIGNS = ("unable to connect", "getaddrinfo failed", "connection refused",
+                  "failed to establish a new connection",
+                  "temporary failure in name resolution", "network is unreachable")
+
+
+def _network_hint(stderr: str) -> str:
+    """El pedazo útil del stderr de yt-dlp, o una línea clara si es la red."""
+    lowered = stderr.lower()
+    if any(sign in lowered for sign in _NETWORK_SIGNS):
+        return "sin conexión a YouTube; se reintenta en la próxima corrida"
+    return stderr.strip()[-300:] or "yt-dlp falló sin mensaje"
+
+
 def _ytdlp_base(cfg: Config) -> list[str]:
     cmd = [sys.executable, "-m", "yt_dlp", "--ffmpeg-location", str(Path(cfg.ffmpeg).parent)]
     # runtime JS para resolver el "throttling" de YouTube (descargas rápidas):
@@ -107,11 +123,14 @@ def download_video(cfg: Config, video_id: str,
         url,
     ])
     if r.returncode != 0:
-        print(f"  [error] descarga de {video_id} falló:\n{r.stderr.strip()[-500:]}")
-        return None
+        # error real (red, YouTube caído...): NO es lo mismo que un video
+        # filtrado a propósito — el llamador decide si reintenta después
+        raise RuntimeError(
+            f"descarga de {video_id} falló: {_network_hint(r.stderr)}")
     lines = [line for line in r.stdout.splitlines() if line.strip()]
     if len(lines) < 3:
-        # el match-filter lo descartó (demasiado corto o en vivo)
+        # el match-filter lo descartó (demasiado corto o en vivo): decisión,
+        # no fallo — None significa exactamente eso
         return None
     # yt-dlp imprime title y duration en la etapa "video" y filepath al final
     title, duration, filepath = lines[0], lines[1], lines[-1]
@@ -164,9 +183,12 @@ def url_download(cfg: Config, url: str) -> Path:
         print(f"  [url] ya descargado: {existing.name}")
         return existing
     print(f"  [url] descargando {url} ...")
-    result = download_video(cfg, video_id, require_min_duration=False)
-    if result is None:
-        raise ValueError(f"no se pudo descargar {url}")
+    try:
+        result = download_video(cfg, video_id, require_min_duration=False)
+    except RuntimeError as e:  # error de descarga -> una línea en el CLI
+        raise ValueError(str(e)) from e
+    if result is None:  # solo puede ser el filtro !is_live
+        raise ValueError(f"no se pudo descargar {url} (¿es una transmisión en vivo?)")
     path, title, duration = result
     print(f"  [url] listo: {title} ({duration:.0f}s)")
     return Path(path)
@@ -182,9 +204,19 @@ def check_channels(cfg: Config, db: State) -> int:
             if db.video_known(vid):
                 continue
             print(f"  [canal] descargando {vid} ...")
-            result = download_video(cfg, vid)
+            try:
+                result = download_video(cfg, vid)
+            except RuntimeError as e:
+                # fallo transitorio (red): NO se registra — la próxima corrida
+                # lo reintenta sola. Registrarlo como skipped lo enterraría
+                # para siempre (skipped no lo reencola nadie).
+                print(f"  [error] {e}")
+                from .notify import notify
+                notify(cfg, "error", f"Descarga de {vid} falló; se reintentará")
+                continue
             if result is None:
-                # registrarlo como omitido para no reintentar cada corrida
+                # filtrado a propósito (corto o en vivo): registrarlo como
+                # omitido para no reevaluarlo cada corrida — esto sí es final
                 db.add_video("youtube", vid, skipped=True)
                 continue
             path, title, duration = result

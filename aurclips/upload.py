@@ -115,10 +115,14 @@ def upload_clip(cfg: Config, db: State, clip) -> str | None:
         status, response = request.next_chunk()
     video_id = response["id"]
 
-    db.set_last_publish_at(publish_at.isoformat())
+    # persistir INMEDIATAMENTE: el Short ya existe en YouTube (paso no
+    # reversible) y clip_uploaded escribe clip + hueco en una transacción.
+    # Cualquier print/notify va después; morir aquí ya no duplica Shorts.
+    stamp = publish_at.isoformat()
+    db.clip_uploaded(clip["id"], video_id, stamp)
     print(f"  [youtube] listo: https://youtu.be/{video_id} "
           f"(se publica {publish_at.strftime('%Y-%m-%d %H:%M %Z')})")
-    return video_id
+    return video_id, stamp
 
 
 def upload_pending(cfg: Config, db: State) -> int:
@@ -159,9 +163,7 @@ def upload_pending(cfg: Config, db: State) -> int:
     uploaded = 0
     for clip in clips:
         try:
-            video_id = upload_clip(cfg, db, clip)
-            publish_at = db.last_publish_at()
-            db.clip_uploaded(clip["id"], video_id, publish_at)
+            video_id, publish_at = upload_clip(cfg, db, clip)
             notify(cfg, "uploaded",
                    f"'{clip['title']}' programado para {publish_at} "
                    f"— https://youtu.be/{video_id}")

@@ -175,6 +175,20 @@ class State:
         """
         return video["status"] in ("new", "transcribed")
 
+    def video_has_clips(self, video_id: int) -> bool:
+        """¿Esta grabación ya tiene clips seleccionados (en cualquier estado)?
+
+        Es la guarda contra re-seleccionar: si una corrida murió entre elegir
+        clips y marcar la grabación como 'selected', volver a seleccionar
+        chocaría con el dedup (los clips propios ya están en la base), daría
+        cero altas y dejaría los clips pendientes huérfanos con la grabación
+        mintiendo 'done'. Con clips existentes, lo que toca es renderizarlos.
+        """
+        cur = self._conn.execute(
+            "SELECT 1 FROM clips WHERE video_id = ? LIMIT 1", (video_id,)
+        )
+        return cur.fetchone() is not None
+
     def recent_videos(self, limit: int = 20) -> list[sqlite3.Row]:
         cur = self._conn.execute(
             "SELECT * FROM videos ORDER BY id DESC LIMIT ?", (limit,)
@@ -372,8 +386,30 @@ class State:
         self._set_clip(clip_id, approved=0)
 
     def clip_uploaded(self, clip_id: int, youtube_id: str, publish_at: str | None):
-        self._set_clip(clip_id, status="uploaded", youtube_id=youtube_id,
-                       publish_at=publish_at)
+        """El Short ya existe en YouTube: clip y hueco consumido, juntos.
+
+        Una sola transacción a propósito — subir es el único paso no
+        reversible del pipeline, y esta transición corre inmediatamente
+        después de recibir el id de YouTube. Si el proceso muere justo aquí,
+        o quedó todo escrito o nada: nunca un Short real sin registrar (que la
+        corrida siguiente re-subiría, duplicando en el canal).
+        """
+        try:
+            self._conn.execute(
+                "UPDATE clips SET status = 'uploaded', youtube_id = ?,"
+                " publish_at = ? WHERE id = ?",
+                (youtube_id, publish_at, clip_id),
+            )
+            if publish_at:
+                self._conn.execute(
+                    "INSERT INTO meta (key, value) VALUES (?, ?)"
+                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (_LAST_PUBLISH_KEY, publish_at),
+                )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
     def clip_failed(self, clip_id: int, error: str):
         self._set_clip(clip_id, status="failed", error=error[:500])
@@ -405,23 +441,35 @@ class State:
         return updated
 
     # --- reencolado -------------------------------------------------------
-    def requeue_failed(self, has_transcript: Callable[[int], bool]) -> int:
+    def requeue_failed(self, has_transcript: Callable[[int], bool],
+                       render_exists: Callable[[str], bool]) -> int:
         """Devuelve a la cola lo que falló, tan atrás como haga falta.
 
-        Una grabación vuelve a transcribirse solo si perdió su transcripción;
-        ``has_transcript`` recibe el id del video y responde si sigue en disco
-        —el módulo no conoce rutas. Un clip vuelve a renderizarse solo si perdió
-        su archivo, y eso sí lo sabe por su propia fila.
+        Los dos callables responden por el disco —el módulo no conoce rutas—:
+        ``has_transcript(video_id)`` dice si la transcripción sigue ahí, y
+        ``render_exists(path)`` si el mp4 del clip existe de verdad. Comprobar
+        el archivo y no solo la columna evita el bucle failed→rendered→failed
+        de un clip cuyo mp4 se borró del output pero conservó la ruta escrita.
+
+        Una grabación que ya tiene clips vuelve a 'selected', no a
+        'transcribed': re-seleccionar con clips existentes es el camino de los
+        huérfanos (ver video_has_clips).
         """
         n = 0
         for video in self._conn.execute(
                 "SELECT id FROM videos WHERE status = 'failed' ORDER BY id").fetchall():
-            status = "transcribed" if has_transcript(video["id"]) else "new"
+            if self.video_has_clips(video["id"]):
+                status = "selected"
+            elif has_transcript(video["id"]):
+                status = "transcribed"
+            else:
+                status = "new"
             self._set_video(video["id"], status=status, error=None)
             n += 1
         for clip in self._conn.execute(
                 "SELECT id, path FROM clips WHERE status = 'failed' ORDER BY id").fetchall():
-            status = "rendered" if clip["path"] else "pending"
+            status = ("rendered" if clip["path"] and render_exists(clip["path"])
+                      else "pending")
             self._set_clip(clip["id"], status=status, error=None)
             n += 1
         return n
