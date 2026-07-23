@@ -6,6 +6,8 @@ tools/
 credentials/
 __pycache__/
 *.pyc
+dist/
+*.egg-info/
 # Added by code-review-graph
 .code-review-graph/
 # tooling local de desarrollo (no se publica)

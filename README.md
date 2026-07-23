@@ -1,5 +1,7 @@
 # 🎬 aurclips
 
+[![tests](https://github.com/feliivk/aurclips/actions/workflows/ci.yml/badge.svg)](https://github.com/feliivk/aurclips/actions/workflows/ci.yml)
+
 Convierte videos largos en Shorts verticales con subtítulos, **completamente
 local**. Corre en **Windows, Linux y macOS**.
 
@@ -67,13 +69,13 @@ fuente de los subtítulos ya viene con el paquete.
 
 ```bash
 # Linux / macOS
-git clone https://github.com/FeliiCL/aurclips && cd aurclips
+git clone https://github.com/feliivk/aurclips && cd aurclips
 sh setup.sh
 ```
 
 ```powershell
 # Windows
-git clone https://github.com/FeliiCL/aurclips; cd aurclips
+git clone https://github.com/feliivk/aurclips; cd aurclips
 powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
@@ -85,11 +87,11 @@ en CPU también funciona (baja `whisper.model` a `small`).
 estándar:
 
 ```bash
-pipx install git+https://github.com/FeliiCL/aurclips     # aislado, comando global
+pipx install git+https://github.com/feliivk/aurclips     # aislado, comando global
 # o, dentro de tu propio entorno:
-pip install git+https://github.com/FeliiCL/aurclips
+pip install git+https://github.com/feliivk/aurclips
 # con soporte GPU NVIDIA (Windows/Linux x86_64):
-pip install "aurclips[cuda] @ git+https://github.com/FeliiCL/aurclips"
+pip install "aurclips[cuda] @ git+https://github.com/feliivk/aurclips"
 ```
 
 Instalado así, aurclips guarda `config.yaml` y los datos en las carpetas de

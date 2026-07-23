@@ -1,0 +1,42 @@
+# Publica en PyPI al empujar un tag v* (p.ej. v0.1.0).
+#
+# Usa "trusted publishing" (OIDC): no hay ningún token de PyPI guardado en
+# GitHub ni en ningún sitio. Requiere dar de alta este repo como publisher en
+# PyPI una sola vez: Account settings -> Publishing -> Add a new pending
+# publisher, con proyecto `aurclips`, owner `feliivk`, repo `aurclips`,
+# workflow `publish.yml` y environment `pypi`.
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Construir sdist y wheel
+        run: |
+          python -m pip install build
+          python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # lo que habilita OIDC/trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
