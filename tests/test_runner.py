@@ -5,6 +5,7 @@ Seams bajo test: ``prune_run_logs`` (rotación, pura) y ``single_instance``
 automatización sea igual en los tres SO.
 """
 
+import sys
 from pathlib import Path
 
 from aurclips.runner import prune_run_logs, single_instance, tee_output
@@ -65,3 +66,16 @@ def test_tee_escribe_en_consola_y_archivo(tmp_path, capsys):
         print("hola corrida")
     assert "hola corrida" in capsys.readouterr().out
     assert "hola corrida" in log.read_text(encoding="utf-8")
+
+
+def test_tee_sigue_pareciendo_un_stream(tmp_path):
+    """Delega isatty/encoding a la consola: si faltaran, una barra de progreso
+    del pipeline rompería la corrida entera al consultarlos."""
+    from aurclips.runner import _Tee
+
+    log = tmp_path / "run.log"
+    with open(log, "w", encoding="utf-8") as f:
+        tee = _Tee(sys.__stdout__, f)
+        # no revientan (AttributeError sería el bug):
+        assert isinstance(tee.isatty(), bool)
+        assert tee.encoding == sys.__stdout__.encoding

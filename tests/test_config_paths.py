@@ -94,3 +94,13 @@ def test_la_base_de_datos_en_modo_usuario_no_es_site_packages(tmp_path, monkeypa
     cfg = Config()
     assert str(tmp_path / "dat") in str(cfg.data_dir)
     assert "site-packages" not in str(cfg.data_dir)
+
+
+def test_los_assets_empaquetados_son_alcanzables():
+    """La siembra del config y la fuente se resuelven por importlib.resources.
+    Si el empaquetado deja de incluir aurclips/assets, el modo instalado
+    revienta al primer arranque — este test lo caza sin construir un wheel."""
+    from importlib import resources
+    assets = resources.files("aurclips") / "assets"
+    assert (assets / "config.default.yaml").is_file()
+    assert (assets / "fonts" / "Anton-Regular.ttf").is_file()

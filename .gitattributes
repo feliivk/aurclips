@@ -1,0 +1,12 @@
+# Los scripts y plantillas POSIX tienen que quedarse con saltos de línea LF,
+# aunque el repo se clone en Windows con core.autocrlf=true: un CRLF en el
+# shebang rompe `#!/usr/bin/env sh` en Linux/macOS.
+*.sh            text eol=lf
+Makefile        text eol=lf
+*.service       text eol=lf
+*.timer         text eol=lf
+*.plist         text eol=lf
+crontab.example text eol=lf
+
+# La fuente es binaria: que git no la toque.
+*.ttf binary

@@ -19,7 +19,7 @@ _model_cache: dict[tuple, object] = {}
 # CPU. Incluye tanto términos de Windows ('dll') como de Linux (cargar una .so
 # de CUDA aflora como 'cannot open shared object file').
 _GPU_ERROR_HINTS = ("cublas", "cudnn", "cuda", "dll", "device",
-                    "shared object", "libcu", ".so")
+                    "shared object", "libcu", ".so.")
 
 # Muestra por extremo/centro con que se identifica una grabación. Hashear
 # varios GB tardaría más que lo que la caché ahorra, así que se muestrea:
@@ -70,6 +70,8 @@ def _pick_device(cfg: Config, force_cpu: bool, cuda_available: bool) -> tuple[st
     compute = cfg.get("whisper.compute_type", "auto")
     if device in ("auto", "cuda") and not cuda_available:
         device = "cpu"
+        if compute == "float16":  # float16 es solo de GPU en ctranslate2
+            compute = "int8"
     return device, compute
 
 

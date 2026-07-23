@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from .config import Config, ROOT
+from .config import Config, ROOT, _exe_suffix
 from .state import State
 
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v", ".ts", ".flv"}
@@ -23,8 +22,7 @@ def _ytdlp_base(cfg: Config) -> list[str]:
     cmd = [sys.executable, "-m", "yt_dlp", "--ffmpeg-location", str(Path(cfg.ffmpeg).parent)]
     # runtime JS para resolver el "throttling" de YouTube (descargas rápidas):
     # el empaquetado en tools/ (nombre por SO) o, si no, uno del sistema
-    deno_name = "deno.exe" if os.name == "nt" else "deno"
-    bundled = ROOT / "tools" / "deno" / deno_name
+    bundled = ROOT / "tools" / "deno" / f"deno{_exe_suffix()}"
     deno_path = str(bundled) if bundled.exists() else shutil.which("deno")
     if deno_path:
         cmd += ["--js-runtimes", f"deno:{deno_path}"]

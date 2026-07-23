@@ -161,12 +161,9 @@ class Config:
         # venga de otra carpeta (p.ej. --config o un tmp de test).
         rel = self.get("paths.ffmpeg", "tools/ffmpeg/bin")
         filename = f"{name}{_exe_suffix()}"
-        seen = set()
-        for base in (self._base, ROOT):
+        # base y ROOT, sin repetir cuando coinciden (checkout: _base == ROOT)
+        for base in dict.fromkeys([self._base, ROOT]):
             bundled = base / rel / filename
-            if bundled in seen:
-                continue
-            seen.add(bundled)
             if bundled.exists():
                 return str(bundled)
         on_path = shutil.which(name)

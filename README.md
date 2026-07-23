@@ -81,6 +81,21 @@ Ambos crean un entorno virtual e instalan el comando `aurclips`. Si tienes GPU
 NVIDIA (Windows/Linux), el setup detecta `nvidia-smi` y ofrece el soporte CUDA;
 en CPU también funciona (baja `whisper.model` a `small`).
 
+¿Prefieres instalarlo como un paquete más, sin el script? Es un proyecto Python
+estándar:
+
+```bash
+pipx install git+https://github.com/Felii/aurclips     # aislado, comando global
+# o, dentro de tu propio entorno:
+pip install git+https://github.com/Felii/aurclips
+# con soporte GPU NVIDIA (Windows/Linux x86_64):
+pip install "aurclips[cuda] @ git+https://github.com/Felii/aurclips"
+```
+
+Instalado así, aurclips guarda `config.yaml` y los datos en las carpetas de
+usuario de tu SO (las crea y te dice dónde en el primer arranque); corriendo
+desde el checkout usa `./config.yaml` y `./data`, como hasta ahora.
+
 Opcional pero recomendado — un modelo local que escriba los títulos:
 
 ```bash

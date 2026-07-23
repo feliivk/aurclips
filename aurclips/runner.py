@@ -32,7 +32,12 @@ def prune_run_logs(log_dir: Path, keep: int = 30) -> int:
 
 
 class _Tee:
-    """Escribe en varios streams a la vez (consola + archivo de log)."""
+    """Escribe en varios streams a la vez (consola + archivo de log).
+
+    Cualquier otro atributo (isatty, fileno, encoding, buffer...) se delega al
+    primero, la consola, para que siga pareciendo un stream real: hay código
+    en el pipeline (barras de progreso, libs que consultan isatty) que rompería
+    la corrida si estos faltaran mientras stdout está intervenido."""
 
     def __init__(self, *streams):
         self._streams = streams
@@ -46,6 +51,10 @@ class _Tee:
     def flush(self):
         for s in self._streams:
             s.flush()
+
+    def __getattr__(self, name):
+        # solo se llama para atributos no definidos aquí: delega a la consola
+        return getattr(self._streams[0], name)
 
 
 @contextmanager

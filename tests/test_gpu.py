@@ -45,6 +45,14 @@ def test_force_cpu_manda_sobre_todo():
     assert compute == "int8"
 
 
+def test_al_bajar_a_cpu_float16_se_normaliza():
+    """float16 es solo de GPU: si se cae a CPU sin normalizar, WhisperModel
+    lanzaría un error que no huele a GPU y no se recuperaría."""
+    device, compute = _pick_device(_Cfg("cuda", "float16"), False, cuda_available=False)
+    assert device == "cpu"
+    assert compute == "int8"
+
+
 def test_cpu_explicito_se_queda_en_cpu():
     device, _ = _pick_device(_Cfg("cpu"), False, cuda_available=True)
     assert device == "cpu"
@@ -61,3 +69,9 @@ def test_un_error_de_so_de_linux_huele_a_gpu():
 
 def test_un_error_ajeno_no_se_confunde_con_gpu():
     assert not _looks_like_gpu_error(ValueError("archivo de audio corrupto"))
+
+
+def test_un_error_con_sock_no_se_confunde_con_una_so_de_cuda():
+    """La pista es '.so.' (libs versionadas de CUDA), no un '.so' suelto que
+    también aparece en rutas como '.sock'."""
+    assert not _looks_like_gpu_error(OSError("no pude abrir /tmp/audio.sock"))
