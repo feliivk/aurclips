@@ -67,13 +67,13 @@ fuente de los subtítulos ya viene con el paquete.
 
 ```bash
 # Linux / macOS
-git clone https://github.com/Felii/aurclips && cd aurclips
+git clone https://github.com/FeliiCL/aurclips && cd aurclips
 sh setup.sh
 ```
 
 ```powershell
 # Windows
-git clone https://github.com/Felii/aurclips; cd aurclips
+git clone https://github.com/FeliiCL/aurclips; cd aurclips
 powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
@@ -85,11 +85,11 @@ en CPU también funciona (baja `whisper.model` a `small`).
 estándar:
 
 ```bash
-pipx install git+https://github.com/Felii/aurclips     # aislado, comando global
+pipx install git+https://github.com/FeliiCL/aurclips     # aislado, comando global
 # o, dentro de tu propio entorno:
-pip install git+https://github.com/Felii/aurclips
+pip install git+https://github.com/FeliiCL/aurclips
 # con soporte GPU NVIDIA (Windows/Linux x86_64):
-pip install "aurclips[cuda] @ git+https://github.com/Felii/aurclips"
+pip install "aurclips[cuda] @ git+https://github.com/FeliiCL/aurclips"
 ```
 
 Instalado así, aurclips guarda `config.yaml` y los datos en las carpetas de

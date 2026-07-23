@@ -47,7 +47,7 @@ cuda = [
 aurclips = "aurclips.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/Felii/aurclips"
+Homepage = "https://github.com/FeliiCL/aurclips"
 
 [tool.hatch.version]
 path = "aurclips/__init__.py"
