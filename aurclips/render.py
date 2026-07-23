@@ -20,6 +20,15 @@ MAX_BLOCKS = 60      # tope de segmentos por clip (seguridad)
 PAD_IN = 0.10        # aire antes de la primera palabra de un bloque
 PAD_OUT = 0.25       # aire después de la última palabra de un bloque
 
+# Como en subtitles.py: config.yaml ship estos mismos valores y un test lo
+# comprueba, para que el respaldo del código no diga otra cosa que la config.
+DEFAULT_SUBTITLES = True
+DEFAULT_TIGHTEN_SILENCES = True
+DEFAULT_MAX_PAUSE = 1.5
+DEFAULT_FACE_TRACKING = True
+DEFAULT_CRF = 20
+DEFAULT_PRESET = "veryfast"
+
 
 def safe_name(text: str, max_len: int = 60) -> str:
     text = re.sub(r"[^\w\sáéíóúüñÁÉÍÓÚÜÑ-]", "", text, flags=re.UNICODE)
@@ -125,11 +134,11 @@ def render_clip(cfg: Config, video_path: str, start: float, end: float,
     duration = end - start
 
     # --- jump cuts -------------------------------------------------------
-    tighten = cfg.get("render.tighten_silences", True) and words
+    tighten = cfg.get("render.tighten_silences", DEFAULT_TIGHTEN_SILENCES) and words
     blocks: list[tuple[float, float]] = [(0.0, duration)]
     render_words = words
     if tighten:
-        max_pause = cfg.get("render.max_pause", 1.5)
+        max_pause = cfg.get("render.max_pause", DEFAULT_MAX_PAUSE)
         blocks = _speech_blocks(words, duration, max_pause)
         render_words = _remap_words(words, blocks)
         kept = sum(b - a for a, b in blocks)
@@ -139,7 +148,7 @@ def render_clip(cfg: Config, video_path: str, start: float, end: float,
 
     # --- encuadre (rostro o centrado) ------------------------------------
     crop_expr = "crop=ih*9/16:ih"
-    if cfg.get("crop.face_tracking", True):
+    if cfg.get("crop.face_tracking", DEFAULT_FACE_TRACKING):
         try:
             from .facecrop import face_crop_filter
             crop_expr = face_crop_filter(cfg, video_path, start, end)
@@ -148,7 +157,7 @@ def render_clip(cfg: Config, video_path: str, start: float, end: float,
 
     # --- subtítulos ------------------------------------------------------
     vf_tail = [crop_expr, "scale=1080:1920"]
-    if cfg.get("render.subtitles", True) and render_words:
+    if cfg.get("render.subtitles", DEFAULT_SUBTITLES) and render_words:
         font = _resolve_font(cfg, workdir)
         build_ass(render_words, cfg.get("render", {}) or {},
                   workdir / "subs.ass", font_name=font)
@@ -160,8 +169,8 @@ def render_clip(cfg: Config, video_path: str, start: float, end: float,
     src = str(Path(video_path).resolve())
     common = [
         "-c:v", "libx264",
-        "-preset", cfg.get("render.preset", "veryfast"),
-        "-crf", str(cfg.get("render.crf", 20)),
+        "-preset", cfg.get("render.preset", DEFAULT_PRESET),
+        "-crf", str(cfg.get("render.crf", DEFAULT_CRF)),
         "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
     ]

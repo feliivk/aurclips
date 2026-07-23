@@ -3,6 +3,10 @@
 Todas las claves de `config.yaml`, con el valor que traen de fábrica. El propio
 archivo está comentado; esto es la referencia para consultar de un vistazo.
 
+Los defaults de render son los mismos en `config.yaml` y en el respaldo del
+código (el que se usa si borras una clave). Un test lo comprueba, así que si
+cambias uno tienes que cambiar el otro.
+
 > Estado beta: los defaults van a cambiar mientras se calibra. Si tocas algo,
 > anota por qué — y comprueba contra `report`, no contra la intuición.
 
@@ -80,15 +84,15 @@ Los pesos y el piso de calidad tienen su propia página:
 | `render.subtitles` | Quemar subtítulos virales | `true` |
 | `render.words_per_caption` | Palabras por frase en pantalla | `3` |
 | `render.font` | Fuente; se descarga a `tools/fonts` | `Anton` |
-| `render.font_size` | Sobre lienzo 1080x1920. El ancho útil son 940 px (márgenes de 70): con 3 palabras por frase, ~160 es el techo cómodo. Más arriba, baja `words_per_caption` a 2 | `160` |
-| `render.outline` | Grosor del contorno negro. Escala con el tamaño (~9%), o la letra se come el borde | `14` |
+| `render.font_size` | Sobre lienzo 1080x1920 (rango viral: 80-120). El ancho útil son 940 px: si lo subes mucho, baja `words_per_caption` a 2 o las frases largas desbordarán | `112` |
+| `render.outline` | Grosor del contorno negro. Conviene escalarlo con el tamaño (~9%), o la letra se come el borde | `10` |
 | `render.base_color` | Color del texto | `#FFFFFF` |
 | `render.highlight_colors` | Palabra clave resaltada (rota entre estos) | amarillo/verde |
 | `render.caption_position` | Altura del texto (`0.70` = tercio bajo, libre de la UI de Shorts) | `0.70` |
 | `render.tighten_silences` | Jump cuts: recortar pausas muertas | `true` |
 | `render.max_pause` | Pausas más largas que esto (s) se recortan. `1.0` para charla pura; `1.5-2.0` en gaming conserva acción | `1.5` |
 | `render.crf` / `render.preset` | Calidad y velocidad de codificación | `20` / `veryfast` |
-| `crop.face_tracking` | Centra el recorte vertical en el rostro dominante. Viene apagado porque en gameplay sin cámara el encuadre perseguiría caras de personajes; ponlo en `true` solo si grabas cara a cámara | `false` |
+| `crop.face_tracking` | Centra el recorte vertical en el rostro dominante. Ponlo en `false` para gameplay sin cámara: si no, el detector se engancha a caras de personajes y el encuadre da tumbos | `true` |
 
 ## Filtro de contenido y duplicados — `safety`, `dedup`
 

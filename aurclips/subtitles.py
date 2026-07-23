@@ -16,12 +16,23 @@ from .heuristics import HOOK_WORDS, STOPWORDS
 
 PLAY_X, PLAY_Y = 1080, 1920
 
+# Valores que se usan cuando la clave falta en config.yaml. config.yaml ship
+# exactamente estos mismos números: si aquí y allí dicen cosas distintas, la
+# documentación miente para quien borre una clave. Un test lo comprueba.
+DEFAULT_FONT = "Anton"
+DEFAULT_FONT_SIZE = 112
+DEFAULT_OUTLINE = 10
+DEFAULT_BASE_COLOR = "#FFFFFF"
+DEFAULT_HIGHLIGHT_COLORS = ["#FFD93D", "#39FF14"]
+DEFAULT_CAPTION_POSITION = 0.70
+DEFAULT_WORDS_PER_CAPTION = 3
+
 ASS_HEADER = """\
 [Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
-WrapStyle: 0
+WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
@@ -85,15 +96,15 @@ def _keyword_index(group: list[dict]) -> int | None:
 
 def build_ass(words: list[dict], cfg_render: dict, out_path: Path,
               font_name: str | None = None) -> Path:
-    font = font_name or cfg_render.get("font", "Anton")
-    size = cfg_render.get("font_size", 112)
-    outline = cfg_render.get("outline", 10)
-    base = _hex_to_ass(cfg_render.get("base_color", "#FFFFFF"))
+    font = font_name or cfg_render.get("font", DEFAULT_FONT)
+    size = cfg_render.get("font_size", DEFAULT_FONT_SIZE)
+    outline = cfg_render.get("outline", DEFAULT_OUTLINE)
+    base = _hex_to_ass(cfg_render.get("base_color", DEFAULT_BASE_COLOR))
     colors = [_hex_to_ass(c) for c in
-              cfg_render.get("highlight_colors", ["#FFD93D", "#39FF14"])] or [base]
-    position = cfg_render.get("caption_position", 0.70)
+              cfg_render.get("highlight_colors", DEFAULT_HIGHLIGHT_COLORS)] or [base]
+    position = cfg_render.get("caption_position", DEFAULT_CAPTION_POSITION)
     margin_v = max(0, int(PLAY_Y * (1.0 - position)))
-    per_caption = cfg_render.get("words_per_caption", 3)
+    per_caption = cfg_render.get("words_per_caption", DEFAULT_WORDS_PER_CAPTION)
 
     lines = [ASS_HEADER.format(font=font, size=size, base=base,
                                outline=outline, margin_v=margin_v)]

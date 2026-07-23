@@ -128,13 +128,8 @@ render:
   subtitles: true       # subtítulos virales quemados (estilo Hormozi)
   words_per_caption: 3  # palabras por frase en pantalla (aparecen una a una)
   font: "Anton"         # se descarga a tools/fonts; si falta usa Arial Black
-  font_size: 160        # sobre lienzo de 1080x1920. El ancho útil son 940px
-                        # (márgenes de 70): con 3 palabras por frase, ~160 es
-                        # el techo cómodo. Si lo subes más, baja
-                        # words_per_caption a 2 o las frases largas saltarán
-                        # a dos líneas
-  outline: 14           # grosor del contorno negro (escala con font_size:
-                        # ~9% del tamaño, o la letra se come el borde)
+  font_size: 112        # sobre lienzo de 1080x1920 (rango viral: 80-120)
+  outline: 10           # grosor del contorno negro
   base_color: "#FFFFFF"
   highlight_colors: ["#FFD93D", "#39FF14"]  # palabra clave (rota amarillo/verde)
   caption_position: 0.70  # altura del texto (0.70 = tercio bajo, libre de UI)
@@ -148,10 +143,7 @@ render:
 # Encuadre inteligente
 # ------------------------------------------------------------
 crop:
-  face_tracking: false  # OFF para gameplay sin cámara: el recorte vertical queda
-                        # centrado en la acción. Con true detectaría rostros (de
-                        # personajes/NPCs del juego) y el encuadre daría tumbos.
-                        # Ponlo en true solo si grabas cara a cámara.
+  face_tracking: true   # detecta el rostro y centra el recorte vertical en él
 
 # ------------------------------------------------------------
 # Filtro de contenido y duplicados
