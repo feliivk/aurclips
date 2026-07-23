@@ -116,6 +116,7 @@ aurclips lo detecta solo. Sigue siendo local y gratis.
 
 ```bash
 aurclips clip "~/grabaciones/partida 12.mkv"
+aurclips clip "https://youtube.com/watch?v=..."   # también URLs: baja una vez y recorta
 aurclips clip partida.mp4 --out ~/edicion
 aurclips clip partida.mp4 --clips 1
 ```
@@ -147,8 +148,10 @@ fácil"*. Es la palanca más grande que tienes y no toca código:
   puedes escribir con el hotkey de tu grabadora o con `aurclips mark`.
 - **O repasando después**: `aurclips mark grabacion.mp4` abre el video y cada
   Enter marca el momento que está sonando. Para lo que grabaste sin marcar y
-  para el material descargado de canales. (Necesita [mpv](https://mpv.io):
-  `winget`/`brew`/`apt install mpv` — solo este modo lo usa.)
+  para el material descargado. También acepta una URL de YouTube — el flujo de
+  curación completo es `mark <URL>` y luego `clip <URL>`, con una sola
+  descarga. (Necesita [mpv](https://mpv.io): `winget`/`brew`/`apt install mpv`
+  — solo este modo lo usa.)
 
 Guía completa: [Grabar en beats](docs/grabar-en-beats.md).
 

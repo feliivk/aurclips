@@ -5,6 +5,9 @@ Uso:
     python -m aurclips run       # pipeline completo (ingesta -> proceso -> subida)
     python -m aurclips mark      # marcar en vivo mientras grabas
     python -m aurclips mark RUTA # repaso: ver la grabación y marcar con Enter
+
+    clip y mark también aceptan una URL de YouTube: el video se descarga a
+    data/downloads (una sola vez) y el comando sigue igual.
     python -m aurclips review    # aprobar o corregir títulos antes de subir
     python -m aurclips ingest    # solo buscar/descargar contenido nuevo
     python -m aurclips process   # solo transcribir + seleccionar + renderizar
@@ -122,9 +125,16 @@ def cmd_mark(cfg: Config, name: str | None = None):
     cada Enter marca el momento que está sonando. Si no, es la sesión en vivo
     de siempre. Ninguna de las dos toca la base.
     """
+    from .ingest import is_url, url_download
     from .marks import record_session, review_session
     from .player import find_mpv
 
+    if name and is_url(name):
+        try:
+            name = str(url_download(cfg, name))
+        except (OSError, ValueError) as e:
+            print(f"[error] {e}")
+            sys.exit(1)
     if name and Path(name).is_file():
         try:
             find_mpv()  # se comprueba aquí: el error de "instala mpv" es solo
@@ -317,20 +327,24 @@ def _run_pipeline(cfg: Config, db: State):
 
 def cmd_clip(cfg: Config, path: str | None, out: str | None,
              max_clips: int | None):
-    """Modo recortador: una grabación entra, salen recortes sueltos.
+    """Modo recortador: una grabación (ruta o URL) entra, salen recortes.
 
-    El único comando que no abre la base: no hay progreso ni criterio que
-    guardar. Por eso recibe la config y no el par (cfg, db).
+    No abre la base: no hay progreso ni criterio que guardar. Por eso recibe
+    la config y no el par (cfg, db). Una URL se resuelve primero a un archivo
+    en downloads/ (descargando una sola vez) y el resto sigue igual.
     """
     from .clipper import clip_recording
+    from .ingest import is_url, url_download
 
     if not path:
-        print("Falta la grabación: aurclips clip RUTA_DEL_VIDEO")
+        print("Falta la grabación: aurclips clip RUTA_O_URL_DEL_VIDEO")
         sys.exit(2)
     if max_clips is not None and max_clips < 1:
         print("--clips es un tope: tiene que ser 1 o más")
         sys.exit(2)
     try:
+        if is_url(path):
+            path = str(url_download(cfg, path))
         clip_recording(cfg, path, out, max_clips)
     except (OSError, ValueError) as e:
         print(f"[error] {e}")

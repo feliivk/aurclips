@@ -91,6 +91,15 @@ material descargado de canales directamente no es tuyo. Para eso está el
 aurclips mark mi-grabacion.mp4
 ```
 
+También acepta una URL de YouTube: descarga el video a `data/downloads` (una
+sola vez) y abre el repaso. El `clip` posterior con la misma URL reutiliza la
+descarga — así se cura material que no está en tu disco:
+
+```bash
+aurclips mark "https://youtube.com/watch?v=..."   # bajar y marcar
+aurclips clip "https://youtube.com/watch?v=..."   # recortar lo marcado
+```
+
 Se abre el video en el reproductor y marcas **sin salir de él**:
 
 - **Enter** (en el reproductor o en el terminal) marca el momento que está

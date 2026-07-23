@@ -13,8 +13,9 @@ glosario diga *Marca* no hace incorrecto a `marks.anchors`.
 ### Material
 
 **Grabación**:
-El video largo del que salen los clips, ya sea dejado en el inbox o descargado
-de un canal. En el código y en la base es `video` (tabla `videos`).
+El video largo del que salen los clips: dejado en el inbox, descargado de un
+canal, o bajado de una URL suelta. En el código y en la base es `video` (tabla
+`videos`).
 _Avoid_: fuente, input, video original
 
 **Beat**:
