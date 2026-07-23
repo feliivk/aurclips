@@ -25,9 +25,11 @@ barato y no obliga a un pipeline paralelo.
   copió ese bucle y ya se había separado del pipeline (perdía el estado
   `flagged`) cuando la revisión lo detectó. Cualquier regla nueva de descarte
   se añade ahí, no en cada modo.
-- **`clip` no abre la base.** Es el único comando que se carga con la config a
-  secas, sin `State`. Es una invariante, no un detalle: en cuanto un recorte
-  suelto tocara la base tendría progreso y criterio, y dejaría de ser suelto.
+- **`clip` no abre la base.** Se carga con la config a secas, sin `State`. Es
+  una invariante, no un detalle: en cuanto un recorte suelto tocara la base
+  tendría progreso y criterio, y dejaría de ser suelto. (`mark` tampoco la
+  abre desde que existe el repaso: marcar es preparación del material, no
+  progreso del pipeline.)
 - **El recortador reutiliza la caché de transcripciones, no un atajo propio.**
   Recortar el mismo video muchas veces mientras se ajustan parámetros es el
   caso de uso, y es barato porque Whisper solo corre la primera vez

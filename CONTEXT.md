@@ -83,7 +83,7 @@ _Avoid_: moderación, QA, curación
 **Señalado**:
 Un clip que el filtro de contenido apartó por lo que dice, en vez de
 descartarlo. No confundir con **Marca**: señalado lo decide el filtro, marcado
-lo decides tú al grabar.
+lo decides tú.
 _Avoid_: marcado (para este sentido), flagueado
 
 **Despublicar**:

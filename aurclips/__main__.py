@@ -123,13 +123,15 @@ def cmd_mark(cfg: Config, name: str | None = None):
     de siempre. Ninguna de las dos toca la base.
     """
     from .marks import record_session, review_session
+    from .player import find_mpv
 
     if name and Path(name).is_file():
         try:
-            review_session(name)
-        except FileNotFoundError as e:  # mpv ausente: una línea, no una traza
+            find_mpv()  # se comprueba aquí: el error de "instala mpv" es solo
+        except FileNotFoundError as e:  # del arranque, no de toda la sesión
             print(f"[error] {e}")
             sys.exit(1)
+        review_session(name)
         return
     record_session(cfg, name)
 
@@ -337,7 +339,6 @@ def cmd_clip(cfg: Config, path: str | None, out: str | None,
 
 COMMANDS = {
     "run": cmd_run,
-    "mark": cmd_mark,
     "review": cmd_review,
     "ingest": cmd_ingest,
     "process": cmd_process,
@@ -352,7 +353,9 @@ COMMANDS = {
 def main():
     parser = argparse.ArgumentParser(prog="aurclips", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["clip", *COMMANDS])
+    # clip y mark van fuera de COMMANDS: no reciben (cfg, db) porque no tocan
+    # la base, así que se despachan aparte antes de abrirla
+    parser.add_argument("command", choices=["clip", "mark", *COMMANDS])
     parser.add_argument("name", nargs="?",
                         help="ruta de la grabación (para 'clip', o para 'mark' "
                              "en modo repaso) o nombre de la sesión en vivo")

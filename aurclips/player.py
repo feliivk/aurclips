@@ -39,9 +39,12 @@ class MpvPlayer:
             self._ipc = rf"\\.\pipe\aurclips-mpv-{os.getpid()}"
         else:
             self._ipc = str(Path(tempfile.gettempdir()) / f"aurclips-mpv-{os.getpid()}.sock")
+        # stdin=DEVNULL: el terminal es de la sesión de marcado; sin esto mpv
+        # heredaría la consola y competiría con el hilo lector por las teclas
         self._proc = subprocess.Popen(
             [mpv_path, f"--input-ipc-server={self._ipc}", "--", str(video_path)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
     def alive(self) -> bool:

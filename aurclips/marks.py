@@ -1,7 +1,7 @@
 """Marcas del creador: lo que marcaste al grabar manda sobre la heurística.
 
 La palanca más grande no está en el código sino arriba, en cómo grabas: si tú
-señalas el momento, el selector no tiene que adivinarlo. Dos canales, ninguno
+señalas el momento, el selector no tiene que adivinarlo. Tres canales, ninguno
 necesita sincronizar relojes:
 
 - **Voz** — dices una frase gatillo mientras grabas ("esto es un short").
@@ -11,6 +11,8 @@ necesita sincronizar relojes:
 - **Archivo** — un ``<video>.marks.txt`` junto al video, un tiempo por línea
   (``12:34``, ``1:02:03`` o segundos sueltos). Lo escribe ``aurclips mark`` o
   cualquier hotkey de tu grabadora que registre timestamps.
+- **Repaso** — ves la grabación después (``aurclips mark <video>``) y cada
+  Enter marca el momento que está sonando. Escribe el mismo sidecar.
 
 Una marca es un *ancla*: el instante que señalaste. Una ventana candidata
 "cae en la marca" si el ancla queda dentro de ella (con holgura), así que da
@@ -274,6 +276,22 @@ def load_marks(cfg, video_path: str | Path, transcript: dict) -> Marks:
 MIN_MARK_GAP = 1.0
 
 
+def _mmss(t: float) -> str:
+    """MM:SS para mostrar en pantalla (los segundos enteros bastan al ojo)."""
+    return f"{int(t) // 60:02d}:{int(t) % 60:02d}"
+
+
+def _timecode(t: float) -> str:
+    """El tiempo como se escribe en el sidecar: MM:SS, con decimales solo si
+    los hay. Así una marca hecha en pausa conserva su precisión y una marca
+    preexistente con fracción (`90.5`) no se redondea al reescribir el archivo
+    — conservar es conservar. `parse_timecode` lee ambas formas."""
+    minutes, seconds = int(t) // 60, t - (int(t) // 60) * 60
+    if seconds == int(seconds):
+        return f"{minutes:02d}:{int(seconds):02d}"
+    return f"{minutes:02d}:{seconds:05.2f}"
+
+
 class MarkingSession:
     """Acumula marcas de una sesión sobre las preexistentes del sidecar.
 
@@ -283,15 +301,13 @@ class MarkingSession:
     preexistentes son intocables: deshacer solo retira lo de esta sesión.
     """
 
-    def __init__(self, existing: list[float] | None = None,
-                 min_gap: float = MIN_MARK_GAP):
+    def __init__(self, existing: list[float] | None = None):
         self._existing = sorted(existing or [])
         self._session: list[float] = []
-        self._min_gap = min_gap
 
     def mark(self, t: float) -> float | None:
         """Registra una marca en ``t``. None si se fundió con una cercana."""
-        if any(abs(t - other) < self._min_gap for other in self.all_marks()):
+        if any(abs(t - other) < MIN_MARK_GAP for other in self.all_marks()):
             return None
         self._session.append(t)
         return t
@@ -305,13 +321,14 @@ class MarkingSession:
         return sorted(self._existing + self._session)
 
     def sidecar_text(self, name: str) -> str:
-        """El contenido del sidecar: cabecera + un tiempo por línea (MM:SS).
+        """El contenido del sidecar: cabecera + un tiempo por línea.
 
         Mismo formato que la sesión en vivo — ASCII editable en cualquier
-        editor y siempre parseable por :func:`file_marks`.
+        editor y siempre parseable por :func:`file_marks`. La precisión se
+        conserva (ver :func:`_timecode`).
         """
         lines = [f"# marcas de {name} - generadas por aurclips mark"]
-        lines += [f"{int(t) // 60:02d}:{int(t) % 60:02d}" for t in self.all_marks()]
+        lines += [_timecode(t) for t in self.all_marks()]
         return "\n".join(lines) + "\n"
 
 
@@ -343,9 +360,10 @@ def record_session(cfg, name: str | None = None) -> Path:
         while True:
             input()
             t = session.mark(time.monotonic() - t0)
-            if t is not None:
-                n = len(session.all_marks())
-                print(f"  marca {n:>2} en {int(t) // 60:02d}:{int(t) % 60:02d}")
+            if t is None:  # doble Enter nervioso: se funde, pero se dice
+                print("  (a menos de 1 s de la anterior; no se duplica)")
+            else:
+                print(f"  marca {len(session.all_marks()):>2} en {_mmss(t)}")
     except (KeyboardInterrupt, EOFError):
         print()
 
@@ -359,11 +377,7 @@ def record_session(cfg, name: str | None = None) -> Path:
 # Repaso (comando `mark` con la ruta de un video)
 # ---------------------------------------------------------------------------
 
-def _mmss(t: float) -> str:
-    return f"{int(t) // 60:02d}:{int(t) % 60:02d}"
-
-
-def _stdin_lines():
+def _stdin_queue():
     """Cola alimentada por un hilo que lee líneas del terminal.
 
     Leer en un hilo permite que el loop principal también vigile si el
@@ -412,7 +426,7 @@ def review_session(video_path: str | Path) -> Path:
     print("  Ctrl+C o cerrar el reproductor -> terminar y guardar\n")
 
     player = MpvPlayer(mpv, video)
-    lines = _stdin_lines()
+    lines = _stdin_queue()
     try:
         while player.alive():
             try:
@@ -438,8 +452,9 @@ def review_session(video_path: str | Path) -> Path:
     except KeyboardInterrupt:
         print()
     finally:
+        # guardar pase lo que pase: ni un error a mitad de repaso pierde
+        # lo ya marcado
         player.close()
-
-    target.write_text(session.sidecar_text(video.stem), encoding="utf-8")
-    print(f"{len(session.all_marks())} marca(s) guardadas en {target}")
+        target.write_text(session.sidecar_text(video.stem), encoding="utf-8")
+        print(f"{len(session.all_marks())} marca(s) guardadas en {target}")
     return target

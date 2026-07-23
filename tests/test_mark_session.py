@@ -68,7 +68,7 @@ def test_dos_marcas_separadas_de_verdad_si_cuentan(tmp_path):
     session = MarkingSession([])
     session.mark(60.0)
     assert session.mark(61.5) is not None
-    assert _written(tmp_path, session) == [60.0, 61.0]  # MM:SS trunca a segundos
+    assert _written(tmp_path, session) == [60.0, 61.5]
 
 
 # --- deshacer ---------------------------------------------------------------
@@ -110,3 +110,17 @@ def test_los_tiempos_largos_sobreviven_el_round_trip(tmp_path):
     session = MarkingSession([])
     session.mark(75 * 60 + 30)
     assert _written(tmp_path, session) == [4530.0]
+
+
+def test_una_marca_preexistente_con_fraccion_no_se_redondea(tmp_path):
+    """Un `90.5` escrito a mano sobrevive al repaso: conservar es conservar."""
+    session = MarkingSession([90.5])
+    session.mark(30.0)
+    assert _written(tmp_path, session) == [30.0, 90.5]
+
+
+def test_la_precision_de_marcar_en_pausa_se_conserva(tmp_path):
+    """La marca en pausa cae donde está el cursor, no en el segundo entero."""
+    session = MarkingSession([])
+    session.mark(7.24)
+    assert _written(tmp_path, session) == [7.24]
