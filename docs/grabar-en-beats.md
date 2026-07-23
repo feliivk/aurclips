@@ -116,7 +116,8 @@ aurclips clip partida.mp4    # los momentos marcados son los recortes
 
 El repaso necesita **[mpv](https://mpv.io)** (solo este modo lo usa): `winget
 install mpv` en Windows, `brew install mpv` en macOS, `apt install mpv` en
-Linux.
+Linux. En Windows también vale dejar el [build portable](https://mpv.io/installation/)
+descomprimido en `tools/mpv`, junto a los demás binarios del repo.
 
 ## Qué NO tienes que hacer
 

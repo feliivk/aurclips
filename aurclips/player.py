@@ -18,16 +18,25 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .config import ROOT, _exe_suffix
+
 
 def find_mpv() -> str:
-    """Ruta de mpv, o un error de una línea con la instalación por SO."""
+    """Ruta de mpv, o un error de una línea con la instalación por SO.
+
+    Como los demás binarios del repo: primero el empaquetado en tools/ (la
+    convención de Windows, donde también viven ffmpeg y deno), luego el PATH.
+    """
+    bundled = ROOT / "tools" / "mpv" / f"mpv{_exe_suffix()}"
+    if bundled.exists():
+        return str(bundled)
     found = shutil.which("mpv")
     if found:
         return found
     raise FileNotFoundError(
         "No se encontró mpv (el reproductor del repaso). Instálalo y agrégalo "
         "al PATH (macOS: brew install mpv · Linux: apt install mpv · "
-        "Windows: winget install mpv)."
+        "Windows: winget install mpv), o deja el portable en tools/mpv."
     )
 
 
