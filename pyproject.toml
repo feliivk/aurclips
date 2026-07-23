@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aurclips"
+description = "De videos largos a YouTube Shorts verticales con subtítulos, 100% local"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "Felii" }]
+keywords = ["youtube", "shorts", "video", "subtitles", "whisper", "ffmpeg", "local"]
+dynamic = ["version"]
+
+# El motor corre igual en Windows, Linux y macOS.
+classifiers = [
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Multimedia :: Video",
+    "Environment :: Console",
+]
+
+dependencies = [
+    "yt-dlp>=2025.1.1",
+    "faster-whisper>=1.1.0",
+    "opencv-python-headless>=4.9",
+    "pydantic>=2.7",
+    "google-api-python-client>=2.140",
+    "google-auth-oauthlib>=1.2",
+    "PyYAML>=6.0",
+    "platformdirs>=4.0",
+    # zoneinfo necesita datos de zonas en Windows; inocuo en Linux/macOS
+    "tzdata>=2024.1 ; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+# Soporte GPU NVIDIA. Solo x86_64 no-macOS: en Apple Silicon no hay CUDA y en
+# macOS estas wheels no existen (ahí se transcribe en CPU).
+cuda = [
+    "nvidia-cublas-cu12 ; sys_platform != 'darwin' and platform_machine == 'x86_64'",
+    "nvidia-cudnn-cu12 ; sys_platform != 'darwin' and platform_machine == 'x86_64'",
+]
+
+[project.scripts]
+aurclips = "aurclips.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/Felii/aurclips"
+
+[tool.hatch.version]
+path = "aurclips/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aurclips"]
+
+# La fuente Anton (OFL) y el config de ejemplo viajan dentro del paquete para
+# que subtítulos y primer arranque funcionen sin descargas ni el setup.
+[tool.hatch.build.targets.sdist]
+include = ["aurclips", "docs", "packaging", "README.md", "CONTEXT.md", "LICENSE", "config.yaml"]

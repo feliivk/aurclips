@@ -61,3 +61,14 @@ def test_todas_las_claves_comprobadas_existen_en_config_yaml():
     doc = _shipped()
     for key, _ in DEFAULTS:
         _at(doc, key)  # KeyError si desapareció
+
+
+def test_el_default_empaquetado_es_identico_al_config_del_repo():
+    """El config.yaml del repo (lo que edita quien clona) y el empaquetado (lo
+    que se siembra al instalar) tienen que ser el mismo. Guardia anti-drift:
+    si editas uno, edita el otro."""
+    repo = (ROOT / "config.yaml").read_text(encoding="utf-8")
+    packaged = (ROOT / "aurclips" / "assets" / "config.default.yaml").read_text(encoding="utf-8")
+    assert packaged == repo, (
+        "aurclips/assets/config.default.yaml quedó desincronizado de config.yaml; "
+        "cópialo de nuevo: cp config.yaml aurclips/assets/config.default.yaml")

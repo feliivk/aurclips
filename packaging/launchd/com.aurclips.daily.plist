@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aurclips.daily</string>
+
+    <!-- Ajusta TU_USUARIO y la ruta al checkout. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/TU_USUARIO/aurclips/.venv/bin/aurclips</string>
+        <string>run</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/TU_USUARIO/aurclips</string>
+
+    <!-- Hora local de la corrida diaria. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>3</integer>
+        <key>Minute</key><integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/TU_USUARIO/aurclips/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/TU_USUARIO/aurclips/logs/launchd.err.log</string>
+</dict>
+</plist>

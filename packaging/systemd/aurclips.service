@@ -1,0 +1,12 @@
+[Unit]
+Description=aurclips: genera Shorts (ingesta, recorte, subida en privado)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Ajusta la ruta a tu checkout. %h = tu carpeta de usuario.
+WorkingDirectory=%h/aurclips
+ExecStart=%h/aurclips/.venv/bin/aurclips run
+# Equivale al -ExecutionTimeLimit 6h del Task Scheduler de Windows.
+RuntimeMaxSec=6h

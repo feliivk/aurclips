@@ -17,12 +17,12 @@ if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
 }
 $python = Join-Path $venv "Scripts\python.exe"
 
-Write-Host "[1/2] Instalando dependencias (puede tardar unos minutos)..."
+Write-Host "[1/2] Instalando aurclips y dependencias (puede tardar unos minutos)..."
 & $python -m pip install --upgrade pip --quiet
-& $python -m pip install -r (Join-Path $root "requirements.txt") --quiet
+& $python -m pip install -e $root --quiet
 if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
-    Write-Host "[1/2] GPU NVIDIA detectada: instalando librerias CUDA para Whisper..."
-    & $python -m pip install nvidia-cublas-cu12 nvidia-cudnn-cu12 --quiet
+    Write-Host "[1/2] GPU NVIDIA detectada: instalando soporte CUDA para Whisper..."
+    & $python -m pip install -e "$root[cuda]" --quiet
 }
 Write-Host "[1/2] Dependencias listas"
 
@@ -37,13 +37,8 @@ if (-not (Test-Path $denoExe)) {
     Remove-Item $zip -Force
 }
 
-# --- 1b. Fuente Anton para los subtitulos ---------------------------------
-$fontFile = Join-Path $root "tools\fonts\Anton-Regular.ttf"
-if (-not (Test-Path $fontFile)) {
-    New-Item -ItemType Directory -Force (Join-Path $root "tools\fonts") | Out-Null
-    Invoke-WebRequest -Uri "https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf" -OutFile $fontFile
-    Write-Host "[1/2] Fuente Anton descargada"
-}
+# (La fuente Anton ahora viaja con el paquete en aurclips/assets/fonts, no se
+#  descarga.)
 
 # --- 2. ffmpeg ------------------------------------------------------------
 $ffmpegExe = Join-Path $root "tools\ffmpeg\bin\ffmpeg.exe"
@@ -64,14 +59,14 @@ if (-not (Test-Path $ffmpegExe)) {
 }
 
 Write-Host ""
-Write-Host "Setup completo. Siguientes pasos:" -ForegroundColor Green
+Write-Host "Setup completo. Ya tienes el comando 'aurclips' en el venv." -ForegroundColor Green
 Write-Host "  1. Edita config.yaml: channel.angle y channel.title_examples (el"
 Write-Host "     contexto con el que se escriben los titulos) y selection.profile"
-Write-Host "  2. Credenciales de YouTube: pon client_secrets.json en credentials\ y corre:"
-Write-Host "       .venv\Scripts\python -m aurclips auth"
-Write-Host "  3. Prueba manual:  .venv\Scripts\python -m aurclips run"
-Write-Host "  4. Revisa y aprueba: .venv\Scripts\python -m aurclips review"
-Write-Host "  5. Automatiza:     powershell -File setup_task.ps1"
+Write-Host "  2. Prueba el recortador:  .venv\Scripts\aurclips clip mi_video.mp4"
+Write-Host "  3. Credenciales de YouTube (opcional): pon client_secrets.json en"
+Write-Host "     credentials\ y corre:  .venv\Scripts\aurclips auth"
+Write-Host "  4. Revisa y aprueba:      .venv\Scripts\aurclips review"
+Write-Host "  5. Automatiza:            powershell -File setup_task.ps1"
 Write-Host ""
 Write-Host "(Recomendado) Instala Ollama y corre 'ollama pull qwen2.5:7b': un"
 Write-Host "modelo local escribe los titulos - sigue siendo 100% local y gratis."

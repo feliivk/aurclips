@@ -1,4 +1,4 @@
-# Dependencias solo de desarrollo (tests). Instalar con:
-#   .venv\Scripts\python -m pip install -r requirements-dev.txt
--r requirements.txt
-pytest>=8.0
+# Dependencias de desarrollo (tests). Instala el paquete con su extra 'dev':
+#   pip install -e .[dev]
+# (Windows: .venv\Scripts\python -m pip install -e .[dev])
+-e .[dev]

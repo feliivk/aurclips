@@ -1,14 +1,14 @@
 # 🎬 aurclips
 
 Convierte videos largos en Shorts verticales con subtítulos, **completamente
-local**.
+local**. Corre en **Windows, Linux y macOS**.
 
-```powershell
-.venv\Scripts\python -m aurclips clip mi_partida.mp4
+```bash
+aurclips clip mi_partida.mp4
 ```
 
 ```
-data\output\mi_partida\
+data/output/mi_partida/
   0001_El_truco_que_nadie_conoce.mp4    ← 9:16, subtítulos quemados
   0001_El_truco_que_nadie_conoce.txt    ← título, descripción y hashtags
   0002_Por_que_nadie_termina_el_juego.mp4
@@ -43,38 +43,62 @@ elegir y editar pasa todo en tu máquina.
   arcos narrativos ni persigue la viralidad. El criterio lo pones tú.
 - **No sube nada.** Publicar en YouTube existe, pero es opcional y viene
   apagado.
-- **No es multiplataforma.** El Python es portable; la instalación y la
-  automatización son de Windows (PowerShell + Programador de tareas).
+- **No acelera en GPU en macOS.** La GPU NVIDIA acelera la transcripción en
+  Windows y Linux; en macOS (incluido Apple Silicon) se transcribe en CPU. En
+  CPU funciona en todas partes, solo más lento.
 - **Está en beta.** Los defaults siguen en calibración: espera cambios de
   configuración entre versiones y **mira lo que genera antes de publicarlo**.
 
 ## Instalación
 
-Necesitas **Windows 10/11**, **[Python 3.12](https://www.python.org/downloads/)**
-(con el launcher `py`) y conexión para el setup (~90 MB: ffmpeg, deno y la
-fuente Anton se descargan a `tools\`).
+Necesitas **[Python 3.12](https://www.python.org/downloads/)** y **ffmpeg**. La
+fuente de los subtítulos ya viene con el paquete.
+
+**ffmpeg** (una vez, con tu gestor de paquetes):
+
+| SO | Comando |
+| --- | --- |
+| macOS | `brew install ffmpeg` |
+| Debian/Ubuntu | `sudo apt install ffmpeg` |
+| Fedora | `sudo dnf install ffmpeg` |
+| Windows | `winget install ffmpeg` (o lo descarga `setup.ps1` a `tools\`) |
+
+**aurclips**:
+
+```bash
+# Linux / macOS
+git clone https://github.com/Felii/aurclips && cd aurclips
+sh setup.sh
+```
 
 ```powershell
+# Windows
+git clone https://github.com/Felii/aurclips; cd aurclips
 powershell -ExecutionPolicy Bypass -File setup.ps1
 ```
 
-Crea el entorno, instala dependencias y detecta tu GPU NVIDIA para instalar el
-soporte CUDA. En CPU también funciona: baja `whisper.model` a `small`.
+Ambos crean un entorno virtual e instalan el comando `aurclips`. Si tienes GPU
+NVIDIA (Windows/Linux), el setup detecta `nvidia-smi` y ofrece el soporte CUDA;
+en CPU también funciona (baja `whisper.model` a `small`).
 
 Opcional pero recomendado — un modelo local que escriba los títulos:
 
-```powershell
+```bash
 ollama pull qwen2.5:7b
 ```
 
 aurclips lo detecta solo. Sigue siendo local y gratis.
 
+> Los ejemplos usan el comando `aurclips` que crea el setup. Si prefieres no
+> activar el entorno, es equivalente a `.venv/bin/python -m aurclips` (Linux/mac)
+> o `.venv\Scripts\python -m aurclips` (Windows).
+
 ## Ejemplo
 
-```powershell
-.venv\Scripts\python -m aurclips clip "C:\grabaciones\partida 12.mkv"
-.venv\Scripts\python -m aurclips clip partida.mp4 --out D:\edicion
-.venv\Scripts\python -m aurclips clip partida.mp4 --clips 1
+```bash
+aurclips clip "~/grabaciones/partida 12.mkv"
+aurclips clip partida.mp4 --out ~/edicion
+aurclips clip partida.mp4 --clips 1
 ```
 
 `--out` cambia la carpeta de destino y `--clips` pone un tope solo para esa
@@ -111,18 +135,22 @@ Si los recortes ya te convencen, aurclips también lleva el ciclo completo: sube
 a YouTube en privado con fecha programada, y YouTube publica uno por día a la
 hora que fijes.
 
-```powershell
-.venv\Scripts\python -m aurclips run       # ingesta -> recortes -> subida
-.venv\Scripts\python -m aurclips review    # aprobar o corregir antes de subir
-.venv\Scripts\python -m aurclips status    # qué hay en cola
-.venv\Scripts\python -m aurclips report    # métricas y qué está funcionando
-.venv\Scripts\python -m aurclips retry     # reencolar lo que falló
+```bash
+aurclips run       # ingesta -> recortes -> subida
+aurclips review    # aprobar o corregir antes de subir
+aurclips status    # qué hay en cola
+aurclips report    # métricas y qué está funcionando
+aurclips retry     # reencolar lo que falló
 ```
 
 A diferencia del modo recortador, esto sí lleva una base de estado: cada clip
 tiene progreso (pendiente, renderizado, subido) y criterio tuyo (sin revisar,
 aprobado, descartado). Mientras `review.enabled` sea `true`, nada se sube sin
 pasar por tu criterio.
+
+Para dejarlo corriendo solo cada día, hay una receta por SO —cron/systemd en
+Linux, launchd en macOS, Programador de tareas en Windows— en
+[`packaging/`](packaging/README.md).
 
 Cómo dar de alta las credenciales, la cuota diaria, la programación y qué hacer
 si un Short salió mal: [Publicar en YouTube](docs/upload-youtube.md).
@@ -144,9 +172,9 @@ inbox, mira `channels` en [Configuración](docs/config.md).
 
 ## Desarrollo
 
-```powershell
-.venv\Scripts\python -m pip install -r requirements-dev.txt
-.venv\Scripts\python -m pytest
+```bash
+pip install -e .[dev]
+pytest
 ```
 
 Los tests corren en segundos, sin GPU, sin video real y sin Ollama.

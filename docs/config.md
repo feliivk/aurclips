@@ -145,4 +145,4 @@ Relativas a la raíz del proyecto.
 | `paths.work` | `data/work` — transcripciones en caché y archivos intermedios |
 | `paths.output` | `data/output` |
 | `paths.credentials` | `credentials` — `client_secrets.json` y token de YouTube |
-| `paths.ffmpeg` | `tools/ffmpeg/bin` — carpeta con `ffmpeg.exe` y `ffprobe.exe` |
+| `paths.ffmpeg` | `tools/ffmpeg/bin` — carpeta con ffmpeg/ffprobe empaquetados (`.exe` en Windows). Si están en el PATH del sistema (Linux/macOS con `brew`/`apt`), se usan esos y esta clave se ignora |

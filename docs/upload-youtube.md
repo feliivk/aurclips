@@ -13,20 +13,20 @@ recortador no pide credenciales.
 1. Entra a [Google Cloud Console](https://console.cloud.google.com/), crea un
    proyecto y habilita **YouTube Data API v3**.
 2. En *Credentials* crea un **OAuth client ID** de tipo **Desktop app** y
-   descarga el JSON como `credentials\client_secrets.json`.
+   descarga el JSON como `credentials/client_secrets.json`.
 3. En *OAuth consent screen* agrega tu cuenta como *test user*.
 4. Inicia sesión (abre el navegador una sola vez):
 
-```powershell
-.venv\Scripts\python -m aurclips auth
+```bash
+aurclips auth
 ```
 
 Es gratis: la YouTube Data API no cobra, solo tiene cuota diaria.
 
 ## Revisar antes de publicar
 
-```powershell
-.venv\Scripts\python -m aurclips review
+```bash
+aurclips review
 ```
 
 Muestra cada clip renderizado con su título, descripción y hashtags, y te deja
@@ -59,8 +59,8 @@ el final del camino.
 No hay comando —es a propósito— pero sí una transición, con el `#id` que te
 muestra `status`:
 
-```powershell
-.venv\Scripts\python -c "from aurclips.config import Config; from aurclips.state import State; State(Config().db_path).clip_unpublished(42)"
+```bash
+python -c "from aurclips.config import Config; from aurclips.state import State; State(Config().db_path).clip_unpublished(42)"
 ```
 
 El hueco de publicación ya consumido no se devuelve: el siguiente Short se
@@ -68,14 +68,17 @@ programa igual para el día siguiente.
 
 ## Dejarlo trabajando solo
 
-```powershell
-powershell -ExecutionPolicy Bypass -File setup_task.ps1 -Hora "03:00"
-```
+La corrida diaria es `aurclips run`: genera los Shorts y los deja listos para tu
+revisión. Cada corrida escribe su log en `logs/run_<fecha>.log` (se conservan
+los últimos 30) y se protege sola contra solapes; los eventos importantes van
+además a `logs/events.log`.
 
-Registra una tarea de Windows que corre el bot todos los días a las 3 AM: busca
-contenido nuevo, genera los Shorts y los deja listos para tu revisión. Cada
-corrida escribe su log en `logs\run_<fecha>.log` (se conservan los últimos 30);
-los eventos importantes van además a `logs\events.log`.
+Automatizarla es una receta por SO —todas están en
+[`packaging/`](../packaging/README.md):
+
+- **Linux**: un timer de systemd (o una línea de cron).
+- **macOS**: un LaunchAgent de launchd (o cron).
+- **Windows**: el Programador de tareas, con `setup_task.ps1 -Hora "03:00"`.
 
 Si pones una URL de webhook de Discord en `alerts.discord_webhook`, recibes un
 aviso cuando se sube un Short, cuando algo falla o cuando hay clips esperando tu

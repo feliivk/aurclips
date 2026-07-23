@@ -15,7 +15,11 @@ from pathlib import Path
 from .config import Config
 
 _model_cache: dict[tuple, object] = {}
-_CUDA_ERRORS = ("cublas", "cudnn", "cuda", "dll", "device")
+# Pistas de que un fallo al construir el modelo es por la GPU y conviene caer a
+# CPU. Incluye tanto términos de Windows ('dll') como de Linux (cargar una .so
+# de CUDA aflora como 'cannot open shared object file').
+_GPU_ERROR_HINTS = ("cublas", "cudnn", "cuda", "dll", "device",
+                    "shared object", "libcu", ".so")
 
 # Muestra por extremo/centro con que se identifica una grabación. Hashear
 # varios GB tardaría más que lo que la caché ahorra, así que se muestrea:
@@ -26,8 +30,17 @@ SAMPLE_BYTES = 1024 * 1024
 
 
 def _register_cuda_dlls():
-    """Registra las DLLs de CUDA instaladas vía pip (Windows no las ve solo)."""
-    base = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    """Registra las DLLs de CUDA instaladas vía pip. Solo aplica en Windows.
+
+    En Linux/macOS no se hace nada: `os.add_dll_directory` no existe fuera de
+    Windows, y las libs de CUDA (.so) las resuelve el linker del sistema o
+    LD_LIBRARY_PATH — no un registro en caliente. Aislarlo tras el guard deja
+    claro que es un shim de Windows, no código muerto por accidente.
+    """
+    if os.name != "nt":
+        return
+    import sysconfig
+    base = Path(sysconfig.get_paths()["purelib"]) / "nvidia"
     for sub in ("cublas", "cudnn"):
         d = base / sub / "bin"
         if d.is_dir():
@@ -35,12 +48,40 @@ def _register_cuda_dlls():
             os.environ["PATH"] = str(d) + os.pathsep + os.environ.get("PATH", "")
 
 
+def _cuda_available() -> bool:
+    """¿Hay una GPU CUDA utilizable? Sondeo explícito, sin olfatear excepciones."""
+    try:
+        import ctranslate2
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:  # noqa: BLE001 — sin ctranslate2/CUDA: simplemente no hay
+        return False
+
+
+def _pick_device(cfg: Config, force_cpu: bool, cuda_available: bool) -> tuple[str, str]:
+    """(device, compute_type) para WhisperModel. Puro: sin cargar nada.
+
+    Si se pide 'auto'/'cuda' pero no hay GPU, se pide 'cpu' explícito en vez de
+    dejar que la construcción del modelo intente CUDA y falle (frecuente en
+    Linux/macOS). Con GPU presente, la elección del usuario se respeta intacta.
+    """
+    if force_cpu:
+        return "cpu", "int8"
+    device = cfg.get("whisper.device", "auto")
+    compute = cfg.get("whisper.compute_type", "auto")
+    if device in ("auto", "cuda") and not cuda_available:
+        device = "cpu"
+    return device, compute
+
+
+def _looks_like_gpu_error(exc: Exception) -> bool:
+    return any(hint in str(exc).lower() for hint in _GPU_ERROR_HINTS)
+
+
 def _get_model(cfg: Config, force_cpu: bool = False):
     from faster_whisper import WhisperModel  # import perezoso: tarda en cargar
 
     _register_cuda_dlls()
-    device = "cpu" if force_cpu else cfg.get("whisper.device", "auto")
-    compute = "int8" if force_cpu else cfg.get("whisper.compute_type", "auto")
+    device, compute = _pick_device(cfg, force_cpu, _cuda_available())
     key = (cfg.get("whisper.model", "small"), device, compute)
     if key not in _model_cache:
         print(f"  [whisper] cargando modelo '{key[0]}' ({device}/{compute})...")
@@ -141,8 +182,10 @@ def transcribe(cfg: Config, video_path: str, out_json: Path | None = None) -> di
     else:
         try:
             result = _run(_get_model(cfg), cfg, video_path)
-        except RuntimeError as e:
-            if not any(k in str(e).lower() for k in _CUDA_ERRORS):
+        except (RuntimeError, OSError) as e:
+            # en Linux un fallo de CUDA aflora como OSError al cargar la .so, no
+            # solo como RuntimeError; si no huele a GPU, no lo tapamos
+            if not _looks_like_gpu_error(e):
                 raise
             print(f"  [whisper] GPU no disponible ({e}); reintentando en CPU...")
             result = _run(_get_model(cfg, force_cpu=True), cfg, video_path)

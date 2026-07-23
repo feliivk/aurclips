@@ -1,8 +1,4 @@
-yt-dlp>=2025.1.1
-faster-whisper>=1.1.0
-opencv-python-headless>=4.9
-pydantic>=2.7
-google-api-python-client>=2.140
-google-auth-oauthlib>=1.2
-PyYAML>=6.0
-tzdata>=2024.1
+# Las dependencias viven en pyproject.toml (fuente única). Instala el paquete:
+#   pip install -e .
+# Este archivo se conserva por costumbre y delega en pyproject.
+-e .

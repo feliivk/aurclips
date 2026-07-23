@@ -258,6 +258,28 @@ def cmd_retry(cfg: Config, db: State):
 
 
 def cmd_run(cfg: Config, db: State):
+    """Corrida diaria: se protege contra solapes y deja su propio log.
+
+    El lock reemplaza el -MultipleInstances del Task Scheduler (cron/launchd no
+    lo dan); la captura y rotación del log vivían en run.ps1 y ahora son iguales
+    en los tres SO, así que el scheduler solo llama a `aurclips run`.
+    """
+    from datetime import datetime
+
+    from .runner import prune_run_logs, single_instance, tee_output
+
+    logs_dir = cfg.logs_dir
+    with single_instance(logs_dir / "run.lock") as acquired:
+        if not acquired:
+            print("Ya hay una corrida en marcha; esta se omite.")
+            return
+        stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+        with tee_output(logs_dir / f"run_{stamp}.log"):
+            _run_pipeline(cfg, db)
+        prune_run_logs(logs_dir, keep=30)
+
+
+def _run_pipeline(cfg: Config, db: State):
     from .notify import notify
     cmd_ingest(cfg, db)
     cmd_process(cfg, db)
@@ -287,7 +309,7 @@ def cmd_clip(cfg: Config, path: str | None, out: str | None,
     from .clipper import clip_recording
 
     if not path:
-        print("Falta la grabación: python -m aurclips clip RUTA_DEL_VIDEO")
+        print("Falta la grabación: aurclips clip RUTA_DEL_VIDEO")
         sys.exit(2)
     if max_clips is not None and max_clips < 1:
         print("--clips es un tope: tiene que ser 1 o más")

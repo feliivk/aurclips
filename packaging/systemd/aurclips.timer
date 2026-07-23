@@ -1,0 +1,11 @@
+[Unit]
+Description=Dispara aurclips todos los días
+
+[Timer]
+# Hora local de la corrida diaria. Cámbiala a gusto.
+OnCalendar=*-*-* 03:00:00
+# Si el equipo estaba apagado a esa hora, la corrida se ejecuta al encender.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

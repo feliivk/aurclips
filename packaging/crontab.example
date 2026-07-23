@@ -1,0 +1,7 @@
+# aurclips: genera Shorts todos los días a las 3 AM.
+# Instala con:  crontab -e   (y pega la línea de abajo, ajustando la ruta)
+#
+# La corrida ya se protege sola contra solapes (lock interno), así que no
+# necesitas flock en la línea de cron.
+
+0 3 * * * cd "$HOME/aurclips" && .venv/bin/aurclips run >> "$HOME/aurclips/logs/cron.log" 2>&1

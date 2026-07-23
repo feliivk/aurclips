@@ -53,20 +53,31 @@ def clip_paths(cfg: Config, clip_id: int, title: str,
     return workdir, destination / f"{clip_id:04d}_{safe_name(title)}.mp4"
 
 
+# Familia de respaldo si no hay ninguna fuente que copiar. libass la resuelve
+# en los tres SO vía fontconfig/Core Text; "Arial Black" solo existía en Windows.
+FALLBACK_FONT = "sans-serif"
+
+
+def _font_source_dirs() -> tuple[Path, ...]:
+    """Dónde buscar fuentes: primero la que viene con el paquete (Anton, OFL,
+    portable en cualquier SO), luego la descargada a tools/ (compat checkout)."""
+    return (Path(__file__).resolve().parent / "assets" / "fonts",
+            ROOT / "tools" / "fonts")
+
+
 def _resolve_font(cfg: Config, workdir: Path) -> str:
-    """Copia las fuentes de tools/fonts al workdir y devuelve el nombre a usar."""
+    """Copia las fuentes disponibles al workdir y devuelve el nombre a usar."""
     font = cfg.get("render.font", "Anton")
-    fonts_dir = ROOT / "tools" / "fonts"
     copied = False
-    if fonts_dir.is_dir():
-        for f in fonts_dir.glob("*.tt[fc]"):
-            shutil.copy2(f, workdir / f.name)
-            copied = True
-        for f in fonts_dir.glob("*.otf"):
-            shutil.copy2(f, workdir / f.name)
-            copied = True
+    for fonts_dir in _font_source_dirs():
+        if not fonts_dir.is_dir():
+            continue
+        for pattern in ("*.tt[fc]", "*.otf"):
+            for f in fonts_dir.glob(pattern):
+                shutil.copy2(f, workdir / f.name)
+                copied = True
     if font.lower() == "anton" and not copied:
-        return "Arial Black"  # respaldo si la fuente no se descargó
+        return FALLBACK_FONT  # respaldo si no hay ninguna fuente disponible
     return font
 
 

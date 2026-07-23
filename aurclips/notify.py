@@ -19,18 +19,15 @@ from .config import ROOT
 def _log_path(cfg) -> Path:
     """Ruta de ``events.log``, creando la carpeta si hace falta.
 
-    Por defecto es ``logs/`` bajo la raíz del proyecto. Si ``paths.logs`` está
-    definido en la configuración se respeta ese valor (una ruta absoluta lo
-    redirige por completo, lo que resulta cómodo para las pruebas)."""
-    sub = "logs"
+    Es ``cfg.logs_dir`` (``logs/`` bajo la base: raíz del repo en checkout, dir
+    de datos de usuario instalado; redirigible con ``paths.logs``). Sin cfg cae
+    a ``logs/`` bajo ROOT."""
     try:
         if cfg is not None:
-            override = cfg.get("paths.logs", "logs")
-            if override:
-                sub = override
+            return cfg.logs_dir / "events.log"
     except Exception:
-        sub = "logs"
-    log_dir = ROOT / sub  # si 'sub' es absoluta, reemplaza a ROOT
+        pass
+    log_dir = ROOT / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir / "events.log"
 
