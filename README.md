@@ -134,6 +134,7 @@ inbox, mira `channels` en [Configuración](docs/config.md).
 
 | | |
 | --- | --- |
+| [Cómo funciona](docs/pipeline.md) | El motor y los dos niveles, con el flujo de punta a punta |
 | [Grabar en beats](docs/grabar-en-beats.md) | Cómo grabar y marcar para que recortar sea trivial |
 | [Selección](docs/selection.md) | Cuántos clips salen y cuáles: piso de calidad y pesos |
 | [Configuración](docs/config.md) | Todas las claves de `config.yaml` |

@@ -36,3 +36,7 @@ por perfil, sin modelar arcos narrativos.
   consecuencia buscada, no un efecto secundario; si el volumen resulta ser el
   cuello de botella en corridas reales, el dial es `quality_floor` —los pesos
   deciden *cuál* clip, el floor decide *cuántos*.
+
+Que el centro sea simple y sin estado es también lo que hizo barato envolverlo
+en un segundo punto de entrada, el modo recortador: ver
+[ADR-0002](0002-recortador-en-la-puerta-publicador-dentro.md).
