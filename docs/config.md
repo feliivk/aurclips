@@ -109,6 +109,15 @@ En el pipeline, un clip se compara contra todos los de la base. En el modo
 recortador, solo contra los recortes de la misma corrida: no hay base que
 recuerde las anteriores.
 
+## Modo continuo — `watch`
+
+| Clave | Qué controla | Default |
+| --- | --- | --- |
+| `watch.poll_seconds` | Cada cuánto mira el inbox el demonio | `60` |
+| `watch.settle_seconds` | Un archivo cuenta como completo si nadie lo tocó en esto; protege también la corrida diaria de grabaciones a medias | `60` |
+| `watch.channel_minutes` | Cadencia de revisión de canales en watch (no se martillea YouTube cada ciclo) | `60` |
+| `watch.retry_hours` | Cadencia del reintento automático de lo fallido (`0` = solo manual) | `12` |
+
 ## Límites, métricas y alertas
 
 | Clave | Qué controla | Default |

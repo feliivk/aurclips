@@ -29,6 +29,40 @@ def cadence_due(last_iso: str | None, every_hours: float,
     return (now - last).total_seconds() >= every_hours * 3600
 
 
+def last_run_info(log_dir: Path) -> tuple[str, bool] | None:
+    """(log más reciente, ¿terminó bien?) de la última corrida o sesión watch.
+
+    Es la primera pregunta de un pipeline desatendido: ¿anoche corrió y cómo
+    terminó? "Bien" = el log cierra con la línea de despedida; una corrida
+    muerta la delata la traza que cmd_run deja dentro del log. None si nunca
+    ha corrido nada.
+    """
+    logs = list(log_dir.glob("run_*.log")) + list(log_dir.glob("watch_*.log"))
+    if not logs:
+        return None
+    newest = max(logs, key=lambda p: p.stat().st_mtime)
+    try:
+        text = newest.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return newest.name, False
+    ok = ("Corrida completa." in text) or ("[watch] detenido" in text)
+    return newest.name, ok
+
+
+def dir_size(path: Path) -> int:
+    """Bytes totales bajo una carpeta; 0 si no existe."""
+    if not path.is_dir():
+        return 0
+    total = 0
+    for f in path.rglob("*"):
+        try:
+            if f.is_file():
+                total += f.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
 def prune_run_logs(log_dir: Path, keep: int = 30,
                    pattern: str = "run_*.log") -> int:
     """Conserva los `keep` logs más nuevos del patrón; borra el resto.

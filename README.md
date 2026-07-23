@@ -162,12 +162,19 @@ a YouTube en privado con fecha programada, y YouTube publica uno por día a la
 hora que fijes.
 
 ```bash
-aurclips run       # ingesta -> recortes -> subida
+aurclips run       # ingesta -> recortes -> subida (corrida única)
+aurclips watch     # modo continuo: vigila el inbox y procesa lo que llegue
 aurclips review    # aprobar o corregir antes de subir
-aurclips status    # qué hay en cola
+aurclips status    # qué hay en cola y cómo terminó la última corrida
+aurclips doctor    # salud: dependencias, colas, disco
 aurclips report    # métricas y qué está funcionando
 aurclips retry     # reencolar lo que falló
 ```
+
+`watch` es el modo demonio: deja caer una grabación al inbox (o que OBS grabe
+directo ahí — no se procesa nada a medio escribir) y sale procesada en
+minutos. Un ciclo fallido no lo mata, Ctrl+C guarda y sale ordenado, y lo
+fallido transitorio se reintenta solo.
 
 A diferencia del modo recortador, esto sí lleva una base de estado: cada clip
 tiene progreso (pendiente, renderizado, subido) y criterio tuyo (sin revisar,

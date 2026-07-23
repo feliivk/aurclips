@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -180,6 +181,29 @@ def is_url(text: str) -> bool:
     return text.startswith(("http://", "https://"))
 
 
+_YT_ID = r"([A-Za-z0-9_-]{11})"
+_YT_PATTERNS = (
+    re.compile(r"[?&]v=" + _YT_ID),
+    re.compile(r"youtu\.be/" + _YT_ID),
+    re.compile(r"/shorts/" + _YT_ID),
+    re.compile(r"/live/" + _YT_ID),
+)
+
+
+def local_youtube_id(url: str) -> str | None:
+    """El id del video sacado de la propia URL, sin red.
+
+    Cubre los formatos estándar de YouTube; para cualquier otra URL se
+    pregunta a yt-dlp (red). Es lo que permite que una URL ya descargada se
+    reutilice también sin internet — el momento donde la caché más vale.
+    """
+    for pattern in _YT_PATTERNS:
+        m = pattern.search(url)
+        if m:
+            return m.group(1)
+    return None
+
+
 def _probe_url_id(cfg: Config, url: str) -> str | None:
     """El id del video detrás de la URL, sin descargar (una llamada rápida)."""
     r = _run(_ytdlp_base(cfg) + ["--no-playlist", "--print", "id", url])
@@ -205,9 +229,17 @@ def url_download(cfg: Config, url: str) -> Path:
     recortador y el repaso, no del pipeline (ADR-0002). El sidecar de marcas
     caerá junto a la descarga, como con cualquier archivo.
     """
-    video_id = _probe_url_id(cfg, url)
+    # primero sin red: si la URL trae el id y la descarga ya está, no hay
+    # nada que preguntar — funciona entero sin internet
+    local_id = local_youtube_id(url)
+    if local_id:
+        existing = find_downloaded(cfg, local_id)
+        if existing is not None:
+            print(f"  [url] ya descargado: {existing.name}")
+            return existing
+    video_id = local_id or _probe_url_id(cfg, url)
     if not video_id:
-        raise ValueError(f"no pude leer la URL (¿es un video válido?): {url}")
+        raise ValueError(f"no pude leer la URL (¿URL válida? ¿hay internet?): {url}")
     existing = find_downloaded(cfg, video_id)
     if existing is not None:
         print(f"  [url] ya descargado: {existing.name}")

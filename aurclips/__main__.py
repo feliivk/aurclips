@@ -15,6 +15,7 @@ Uso:
     python -m aurclips upload    # solo subir clips renderizados
     python -m aurclips auth      # iniciar sesión de YouTube (una sola vez)
     python -m aurclips status    # ver estado de videos y clips
+    python -m aurclips doctor    # salud: dependencias, última corrida, disco
     python -m aurclips report    # métricas de los Shorts publicados y cola
     python -m aurclips retry     # reencolar videos/clips fallidos
 """
@@ -37,21 +38,24 @@ def _load() -> tuple[Config, State]:
     return cfg, db
 
 
-def cmd_ingest(cfg: Config, db: State):
+def cmd_ingest(cfg: Config, db: State) -> int:
     from .ingest import ingest
-    ingest(cfg, db)
+    return ingest(cfg, db)
 
 
-def cmd_process(cfg: Config, db: State, keep_going=None):
+def cmd_process(cfg: Config, db: State, keep_going=None) -> tuple[int, int]:
+    """Procesa lo pendiente. Devuelve (videos procesados, clips renderizados)
+    de ESTA corrida — los números que el evento 'run' registra en events.log."""
     from .render import render_clip
     from .safety import screen_clip
     from .select_clips import clip_words, select_clips
     from .transcribe import transcribe
 
+    procesados = rendered = 0
     videos = db.videos_to_process()
     if not videos:
         print("[2/4] No hay videos pendientes por procesar")
-        return
+        return 0, 0
     max_videos = cfg.get("limits.max_videos_per_run", 3)
     if len(videos) > max_videos:
         print(f"[2/4] {len(videos)} pendientes; se procesan {max_videos} "
@@ -120,7 +124,9 @@ def cmd_process(cfg: Config, db: State, keep_going=None):
                 out = render_clip(cfg, video["path"], clip["start"], clip["end"],
                                   clip["title"], words, clip["id"])
                 db.clip_rendered(clip["id"], str(out))
+                rendered += 1
             db.video_finished(vid)
+            procesados += 1
         except Exception as e:  # noqa: BLE001 — un video fallido no detiene el resto
             print(f"  [error] video {vid} ({title}): {e}")
             if not isinstance(e, RuntimeError):
@@ -131,6 +137,7 @@ def cmd_process(cfg: Config, db: State, keep_going=None):
             db.video_failed(vid, str(e))
             from .notify import notify
             notify(cfg, "error", f"Falló el video '{title}': {str(e)[:200]}")
+    return procesados, rendered
 
 
 def cmd_mark(cfg: Config, name: str | None = None):
@@ -243,9 +250,9 @@ def cmd_review(cfg: Config, db: State):
     print(f"\n{approved} aprobado(s), {discarded} descartado(s).")
 
 
-def cmd_upload(cfg: Config, db: State):
+def cmd_upload(cfg: Config, db: State) -> int:
     from .upload import upload_pending
-    upload_pending(cfg, db)
+    return upload_pending(cfg, db)
 
 
 def cmd_auth(cfg: Config, db: State):
@@ -254,7 +261,92 @@ def cmd_auth(cfg: Config, db: State):
     print("Autenticación de YouTube completada.")
 
 
+def cmd_doctor(cfg: Config, db: State):
+    """Salud del sistema de un vistazo: dependencias, última corrida, colas, disco.
+
+    Solo compone sondas que ya existen; nada nuevo que mantener. Lo opcional
+    (mpv, Ollama, GPU, credenciales) se reporta como estado, no como falla.
+    """
+    import shutil as sh
+
+    from .runner import dir_size, last_run_info
+
+    def probe(nombre: str, fn, opcional: bool = False, arreglo: str = ""):
+        try:
+            valor = fn()
+            extra = f" — {valor}" if isinstance(valor, str) else ""
+            print(f"  OK      {nombre}{extra}")
+        except Exception as e:  # noqa: BLE001 — doctor reporta, nunca revienta
+            etiqueta = "opcional" if opcional else "FALTA  "
+            arreglo = f" ({arreglo})" if arreglo else ""
+            print(f"  {etiqueta} {nombre}: {str(e).splitlines()[0][:120]}{arreglo}")
+
+    print("== Dependencias ==")
+    probe("ffmpeg", lambda: Path(cfg.ffmpeg).name)
+    probe("ffprobe", lambda: Path(cfg.ffprobe).name)
+    probe("yt-dlp", lambda: __import__("yt_dlp").version.__version__)
+
+    def _mpv():
+        from .player import find_mpv
+        return Path(find_mpv()).name
+    probe("mpv (repaso)", _mpv, opcional=True)
+
+    def _ollama():
+        from . import titles
+        if not titles.available(cfg):
+            raise RuntimeError("no está corriendo; los títulos salen heurísticos")
+        return cfg.get("titles.model", titles.DEFAULT_MODEL)
+    probe("Ollama (títulos)", _ollama, opcional=True)
+
+    def _gpu():
+        from .transcribe import _cuda_available
+        if not _cuda_available():
+            raise RuntimeError("sin GPU CUDA; Whisper corre en CPU")
+        return "GPU CUDA disponible"
+    probe("GPU", _gpu, opcional=True)
+
+    def _sesion():
+        from .upload import get_credentials
+        get_credentials(cfg, interactive=False)
+        return "sesión de YouTube vigente"
+    probe("YouTube", _sesion, opcional=not cfg.get("upload.enabled", False),
+          arreglo="aurclips auth")
+
+    print("\n== Última corrida ==")
+    info = last_run_info(cfg.logs_dir)
+    if info is None:
+        print("  (ninguna todavía)")
+    else:
+        nombre, ok = info
+        estado = "completa" if ok else f"INCOMPLETA — revisa logs/{nombre}"
+        print(f"  {nombre}: {estado}")
+
+    print("\n== Colas ==")
+    print(f"  {len(db.videos_to_process())} video(s) con trabajo pendiente")
+    print(f"  {len(db.clips_to_review())} clip(s) esperando tu revisión")
+    print(f"  {db.count_queued()} clip(s) en cola de subida")
+    problemas = db.problem_clips()
+    if problemas:
+        print(f"  {len(problemas)} clip(s) con problemas — mira 'aurclips report'")
+
+    print("\n== Disco ==")
+    for nombre, carpeta in (("descargas", cfg.downloads_dir),
+                            ("trabajo/caché", cfg.work_dir),
+                            ("salida", cfg.output_dir)):
+        print(f"  {nombre}: {dir_size(carpeta) / 1e9:.1f} GB")
+    libre = sh.disk_usage(cfg.data_dir).free / 1e9
+    aviso = "  ⚠ queda poco espacio" if libre < 10 else ""
+    print(f"  libre en disco: {libre:.0f} GB{aviso}")
+
+
 def cmd_status(cfg: Config, db: State):
+    from .runner import last_run_info
+
+    info = last_run_info(cfg.logs_dir)
+    if info is not None:
+        nombre, ok = info
+        estado = "completa" if ok else f"INCOMPLETA — revisa logs/{nombre}"
+        print(f"Última corrida: {nombre} — {estado}\n")
     print("== Videos ==")
     rows = db.recent_videos(20)
     if not rows:
@@ -341,14 +433,24 @@ def cmd_run(cfg: Config, db: State):
 
 
 def _run_pipeline(cfg: Config, db: State):
+    import time
+
     from .notify import notify
-    cmd_ingest(cfg, db)
-    cmd_process(cfg, db)
-    cmd_upload(cfg, db)
+
+    # métricas DE ESTA corrida en el evento 'run': events.log se vuelve el
+    # registro histórico por corrida, gratis — y con 'run' en alerts.notify_on
+    # es además el latido diario en Discord (si un día falta, no corrió)
+    t0 = time.monotonic()
+    nuevos = cmd_ingest(cfg, db) or 0
+    procesados, clips_nuevos = cmd_process(cfg, db)
+    subidos = cmd_upload(cfg, db) or 0
+    minutos = (time.monotonic() - t0) / 60
     uploaded = db.count_published()
     queued = db.count_queued()
     notify(cfg, "run",
-           f"Corrida completa: {uploaded} clips subidos en total, {queued} en cola")
+           f"Corrida completa en {minutos:.0f}m: {nuevos} video(s) nuevos, "
+           f"{procesados} procesados, {clips_nuevos} clips renderizados, "
+           f"{subidos} subidos; acumulado {uploaded} publicados, {queued} en cola")
     print("\nCorrida completa.")
     # la corrida diaria pasa de madrugada: si algo espera tu criterio, que te
     # busque a ti — el loop no se cierra solo
@@ -510,6 +612,7 @@ def cmd_clip(cfg: Config, path: str | None, out: str | None,
 COMMANDS = {
     "run": cmd_run,
     "watch": cmd_watch,
+    "doctor": cmd_doctor,
     "review": cmd_review,
     "ingest": cmd_ingest,
     "process": cmd_process,
