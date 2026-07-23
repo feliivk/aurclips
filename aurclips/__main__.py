@@ -117,7 +117,11 @@ def cmd_process(cfg: Config, db: State):
             db.video_finished(vid)
         except Exception as e:  # noqa: BLE001 — un video fallido no detiene el resto
             print(f"  [error] video {vid} ({title}): {e}")
-            traceback.print_exc()
+            if not isinstance(e, RuntimeError):
+                # los RuntimeError del pipeline son mensajes curados de una
+                # línea (ffmpeg, modelo de Whisper, sesión); la traza es para
+                # lo inesperado
+                traceback.print_exc()
             db.video_failed(vid, str(e))
             from .notify import notify
             notify(cfg, "error", f"Falló el video '{title}': {str(e)[:200]}")
@@ -308,9 +312,21 @@ def cmd_run(cfg: Config, db: State):
             print("Ya hay una corrida en marcha; esta se omite.")
             return
         stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+        died: Exception | None = None
         with tee_output(logs_dir / f"run_{stamp}.log"):
-            _run_pipeline(cfg, db)
+            try:
+                _run_pipeline(cfg, db)
+            except Exception as e:  # noqa: BLE001 — una corrida muerta tiene
+                # que ser VISIBLE: la traza queda en el run log (el tee sigue
+                # activo aquí) y el evento en events.log/Discord; sin esto, la
+                # corrida de las 3 AM moría sin dejar rastro en ningún lado
+                died = e
+                traceback.print_exc()
+                from .notify import notify
+                notify(cfg, "error", f"La corrida murió: {str(e)[:300]}")
         prune_run_logs(logs_dir, keep=30)
+        if died is not None:
+            sys.exit(1)
 
 
 def _run_pipeline(cfg: Config, db: State):
@@ -399,6 +415,16 @@ def main():
     except KeyboardInterrupt:
         print("\nInterrumpido.")
         sys.exit(130)
+    except SystemExit:
+        raise
+    except Exception as e:  # noqa: BLE001 — la última red: ningún comando
+        # muere invisible. Cubre también los fallos ANTES de abrir el log de
+        # corrida (state.db bloqueada, config.yaml roto): notify tolera
+        # cfg=None cayendo a logs/ bajo la raíz.
+        traceback.print_exc()
+        from .notify import notify
+        notify(None, "error", f"aurclips {args.command} murió: {str(e)[:300]}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

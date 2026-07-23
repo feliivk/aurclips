@@ -228,6 +228,15 @@ def check_channels(cfg: Config, db: State) -> int:
 
 def ingest(cfg: Config, db: State) -> int:
     print("[1/4] Ingesta de contenido...")
-    n = scan_inbox(cfg, db) + check_channels(cfg, db)
+    n = 0
+    # cada fuente aislada: que el inbox explote no impide revisar canales, y
+    # viceversa — el demonio no puede morir por una fase de ingesta
+    for fase in (scan_inbox, check_channels):
+        try:
+            n += fase(cfg, db)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [error] {fase.__name__} falló: {e}")
+            from .notify import notify
+            notify(cfg, "error", f"Ingesta ({fase.__name__}) falló: {str(e)[:200]}")
     print(f"  {n} video(s) nuevo(s)")
     return n

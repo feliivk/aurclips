@@ -87,7 +87,19 @@ def _get_model(cfg: Config, force_cpu: bool = False):
     key = (cfg.get("whisper.model", "small"), device, compute)
     if key not in _model_cache:
         print(f"  [whisper] cargando modelo '{key[0]}' ({device}/{compute})...")
-        _model_cache[key] = WhisperModel(key[0], device=device, compute_type=compute)
+        try:
+            _model_cache[key] = WhisperModel(key[0], device=device,
+                                             compute_type=compute)
+        except OSError as e:
+            if _looks_like_gpu_error(e):
+                raise  # la ruta GPU->CPU de transcribe() se encarga
+            # el caso típico: primera corrida sin internet y sin el modelo
+            # cacheado — merece una línea útil, no la traza de HuggingFace
+            raise RuntimeError(
+                f"no se pudo cargar el modelo '{key[0]}' de Whisper ({e}). "
+                f"Si es la primera corrida, hace falta internet una vez para "
+                f"descargarlo; después queda cacheado."
+            ) from e
     return _model_cache[key]
 
 

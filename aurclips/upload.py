@@ -36,7 +36,16 @@ def get_credentials(cfg: Config, interactive: bool = True):
     if token_path.exists():
         creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except Exception as e:  # noqa: BLE001 — TransportError/RefreshError de
+            # google.auth NO son RuntimeError: sin esta conversión, una corrida
+            # programada con el token caducado (lo normal: caducan en ~1h) y
+            # sin internet moría con traza en vez de degradar a "queda en cola"
+            raise RuntimeError(
+                f"no se pudo refrescar la sesión de YouTube ({e}); "
+                f"los clips quedan en cola hasta que vuelva la conexión"
+            ) from e
         token_path.write_text(creds.to_json(), encoding="utf-8")
     if not creds or not creds.valid:
         if not interactive:
@@ -145,7 +154,8 @@ def upload_pending(cfg: Config, db: State) -> int:
         return 0
     try:
         get_credentials(cfg, interactive=False)
-    except RuntimeError as e:
+    except Exception as e:  # noqa: BLE001 — cualquier fallo de sesión degrada
+        # igual: la cola se conserva y se reintenta en la próxima corrida
         print(f"  [aviso] {e}")
         print("  los clips quedan en cola; se subirán cuando haya sesión")
         return 0
