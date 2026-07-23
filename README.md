@@ -82,7 +82,9 @@ corrida. Nada de esto toca `config.yaml`, ni deja cola pendiente, ni necesita
 credenciales: un recorte suelto entra y sale.
 
 Recortar dos veces la misma grabación no la vuelve a transcribir — la
-transcripción queda en caché, así que probar parámetros es barato.
+transcripción queda en caché, así que probar parámetros es barato. La segunda
+corrida **reemplaza** los recortes de la primera en esa carpeta: si quieres
+conservar los anteriores, dales otro `--out`.
 
 Los mandos completos están en [Configuración](docs/config.md) y
 [Selección](docs/selection.md).
@@ -119,8 +121,8 @@ hora que fijes.
 
 A diferencia del modo recortador, esto sí lleva una base de estado: cada clip
 tiene progreso (pendiente, renderizado, subido) y criterio tuyo (sin revisar,
-aprobado, descartado). Nada se sube sin tu visto bueno mientras
-`review.enabled` sea `true`.
+aprobado, descartado). Mientras `review.enabled` sea `true`, nada se sube sin
+pasar por tu criterio.
 
 Cómo dar de alta las credenciales, la cuota diaria, la programación y qué hacer
 si un Short salió mal: [Publicar en YouTube](docs/upload-youtube.md).

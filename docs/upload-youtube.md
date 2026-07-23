@@ -31,7 +31,7 @@ Es gratis: la YouTube Data API no cobra, solo tiene cuota diaria.
 
 Muestra cada clip renderizado con su título, descripción y hashtags, y te deja
 **aprobar (Enter), corregir el título, regenerarlo con el LLM o descartarlo**.
-Nada se sube sin ese visto bueno mientras `review.enabled` sea `true`. Son unos
+Mientras `review.enabled` sea `true`, nada se sube sin pasar por ahí. Son unos
 pocos clips al día: es el punto donde tu criterio entra al pipeline sin tocar
 código.
 

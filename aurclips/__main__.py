@@ -39,7 +39,7 @@ def cmd_ingest(cfg: Config, db: State):
 
 def cmd_process(cfg: Config, db: State):
     from .render import render_clip
-    from .safety import check_text, is_duplicate
+    from .safety import screen_clip
     from .select_clips import clip_words, select_clips
     from .transcribe import transcribe
 
@@ -79,26 +79,19 @@ def cmd_process(cfg: Config, db: State):
                     text = " ".join(
                         w["word"] for w in clip_words(transcript, c.start, c.end)
                     )
-                    flagged = False
-                    # filtro de contenido no apto
-                    if cfg.get("safety.enabled", True):
-                        terms = check_text(cfg, text)
-                        if terms:
-                            action = cfg.get("safety.action", "skip")
-                            print(f"  [filtro] clip {c.title!r} contiene: "
-                                  f"{', '.join(terms[:5])} -> {action}")
-                            if action == "skip":
-                                continue
-                            flagged = True
-                    # limpieza de duplicados
-                    if cfg.get("dedup.enabled", True):
-                        dup, dup_id = is_duplicate(
-                            db, text, cfg.get("dedup.similarity", 0.8))
-                        if dup:
-                            print(f"  [dedup] clip {c.title!r} es casi idéntico "
-                                  f"al clip #{dup_id}; se omite")
-                            continue
-                    db.add_clip(vid, i, c, text, flagged=flagged)
+                    known = ((row["id"], row["text"])
+                             for row in db.texts_for_dedup())
+                    verdict = screen_clip(cfg, text, known)
+                    if verdict.unsafe_terms:
+                        print(f"  [filtro] clip {c.title!r} contiene: "
+                              f"{', '.join(verdict.unsafe_terms[:5])} -> "
+                              f"{cfg.get('safety.action', 'skip')}")
+                    if verdict.duplicate_of is not None:
+                        print(f"  [dedup] clip {c.title!r} es casi idéntico "
+                              f"al clip #{verdict.duplicate_of}; se omite")
+                    if not verdict.keep:
+                        continue
+                    db.add_clip(vid, i, c, text, flagged=verdict.flagged)
                     added += 1
                 if not added:
                     print("  todos los clips fueron filtrados; video terminado")
@@ -301,7 +294,7 @@ def cmd_clip(cfg: Config, path: str | None, out: str | None,
         sys.exit(2)
     try:
         clip_recording(cfg, path, out, max_clips)
-    except (FileNotFoundError, OSError) as e:
+    except (OSError, ValueError) as e:
         print(f"[error] {e}")
         sys.exit(1)
 

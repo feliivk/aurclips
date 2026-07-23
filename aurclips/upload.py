@@ -46,7 +46,8 @@ def get_credentials(cfg: Config, interactive: bool = True):
         if not secrets_path.exists():
             raise RuntimeError(
                 f"Falta {secrets_path}. Descárgalo de Google Cloud Console "
-                "(credencial OAuth de tipo 'Desktop app') — ver README."
+                "(credencial OAuth de tipo 'Desktop app') — ver "
+                "docs/upload-youtube.md."
             )
         flow = InstalledAppFlow.from_client_secrets_file(str(secrets_path), SCOPES)
         creds = flow.run_local_server(port=0)

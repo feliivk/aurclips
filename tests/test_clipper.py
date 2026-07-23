@@ -58,12 +58,12 @@ def _corto(text: str) -> dict:
 
 # --- el filtro de contenido -------------------------------------------------
 
-def test_un_recorte_con_término_no_apto_se_descarta(tmp_path):
+def test_un_recorte_con_termino_no_apto_se_descarta(tmp_path):
     cfg = _cfg(tmp_path, safety={"enabled": True, "action": "skip"})
     assert plan_clips(cfg, _corto(DROGAS), "partida", NO_VIDEO) == []
 
 
-def test_con_flag_el_recorte_se_conserva_para_que_tú_decidas(tmp_path):
+def test_con_flag_el_recorte_se_conserva_para_que_tu_decidas(tmp_path):
     cfg = _cfg(tmp_path, safety={"enabled": True, "action": "flag"})
     assert len(plan_clips(cfg, _corto(DROGAS), "partida", NO_VIDEO)) == 1
 
@@ -86,7 +86,7 @@ def test_sin_dedup_salen_todas_las_ventanas(tmp_path):
     assert len(plan_clips(cfg, _transcript(480), "charla", NO_VIDEO)) == 3
 
 
-def test_las_ventanas_casi_idénticas_dejan_un_solo_recorte(tmp_path):
+def test_las_ventanas_casi_identicas_dejan_un_solo_recorte(tmp_path):
     """La misma charla repetida no son tres Shorts: es uno, tres veces."""
     cfg = _cfg(tmp_path, dedup={"enabled": True, "similarity": 0.8},
                clips_per_video=3)
@@ -122,7 +122,7 @@ def _clip(title="Un título con gancho", description="Una descripción",
                            tags=list(tags), marked=False)
 
 
-def test_la_metadata_trae_título_descripción_y_hashtags():
+def test_la_metadata_trae_titulo_descripcion_y_hashtags():
     texto = metadata_text(_clip())
     assert "Un título con gancho" in texto
     assert "Una descripción" in texto
@@ -133,7 +133,7 @@ def test_los_hashtags_no_se_duplican_la_almohadilla():
     assert "##" not in metadata_text(_clip(tags=("#gaming", "shorts")))
 
 
-def test_sin_descripción_la_metadata_sigue_saliendo():
+def test_sin_descripcion_la_metadata_sigue_saliendo():
     """Sin Ollama la heurística puede no dar descripción; el archivo no queda roto."""
     texto = metadata_text(_clip(description="", tags=("gaming",)))
     assert texto.startswith("Un título con gancho")

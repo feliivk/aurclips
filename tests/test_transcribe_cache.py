@@ -80,12 +80,25 @@ def test_cambiar_de_idioma_forzado_cambia_la_clave(tmp_path):
     assert automatico != forzado
 
 
-def test_calcular_la_clave_no_lee_la_grabación_entera(tmp_path):
-    """Hashear varios GB tardaría más que lo que ahorra: se muestrea."""
+def test_calcular_la_clave_no_lee_la_grabacion_entera(tmp_path):
+    """Hashear varios GB tardaría más que lo que ahorra: se muestrea.
+
+    Se afirma por su consecuencia, que es la única forma honesta de verlo
+    desde fuera: si de verdad solo se leen muestras, cambiar bytes de una zona
+    que no se muestrea no cambia la clave. Es el precio del muestreo y está
+    documentado: dos archivos así son un recodificado, no otra grabación.
+    """
     cfg = _cfg(tmp_path, model="medium")
-    grande = _video(tmp_path / "grande.mp4", b"x" * (8 * 1024 * 1024))
-    assert T.content_key(cfg, grande)  # no explota ni tarda: solo muestrea
-    assert T.SAMPLE_BYTES * 3 < 8 * 1024 * 1024
+    size = 8 * T.SAMPLE_BYTES
+    contenido = bytearray(b"x" * size)
+    original = _video(tmp_path / "grande.mp4", bytes(contenido))
+
+    # zona intermedia intacta por las tres muestras (principio, centro, final)
+    sin_muestrear = int(T.SAMPLE_BYTES * 1.5)
+    contenido[sin_muestrear:sin_muestrear + 1024] = b"z" * 1024
+    retocado = _video(tmp_path / "retocado.mp4", bytes(contenido))
+
+    assert T.content_key(cfg, original) == T.content_key(cfg, retocado)
 
 
 # --- guardar y recuperar ----------------------------------------------------
@@ -98,25 +111,25 @@ def test_lo_guardado_se_recupera_igual(tmp_path):
     assert T.cached_transcript(cfg, video) == TRANSCRIPT
 
 
-def test_una_grabación_nunca_vista_no_tiene_caché(tmp_path):
+def test_una_grabacion_nunca_vista_no_tiene_cache(tmp_path):
     cfg = _cfg(tmp_path, model="medium")
     assert T.cached_transcript(cfg, _video(tmp_path / "nueva.mp4")) is None
 
 
-def test_la_caché_sirve_a_la_grabación_renombrada(tmp_path):
+def test_la_cache_sirve_a_la_grabacion_renombrada(tmp_path):
     cfg = _cfg(tmp_path, model="medium")
     T.store_transcript(cfg, _video(tmp_path / "partida.mp4"), TRANSCRIPT)
     renombrada = _video(tmp_path / "partida_final_v2.mp4")
     assert T.cached_transcript(cfg, renombrada) == TRANSCRIPT
 
 
-def test_otro_modelo_no_reutiliza_la_transcripción(tmp_path):
+def test_otro_modelo_no_reutiliza_la_transcripcion(tmp_path):
     video = _video(tmp_path / "partida.mp4")
     T.store_transcript(_cfg(tmp_path, model="medium"), video, TRANSCRIPT)
     assert T.cached_transcript(_cfg(tmp_path, model="small"), video) is None
 
 
-def test_una_caché_corrupta_no_rompe_la_corrida(tmp_path):
+def test_una_cache_corrupta_no_rompe_la_corrida(tmp_path):
     """Un JSON a medias se ignora y se transcribe de nuevo, no revienta."""
     cfg = _cfg(tmp_path, model="medium")
     video = _video(tmp_path / "partida.mp4")
@@ -127,7 +140,7 @@ def test_una_caché_corrupta_no_rompe_la_corrida(tmp_path):
 
 # --- lo que la caché le ahorra al pipeline ----------------------------------
 
-def test_con_caché_no_se_carga_whisper(tmp_path, monkeypatch):
+def test_con_cache_no_se_carga_whisper(tmp_path, monkeypatch):
     """La promesa entera: si ya está transcrito, el modelo ni se toca."""
     cfg = _cfg(tmp_path, model="medium")
     video = _video(tmp_path / "partida.mp4")
@@ -140,7 +153,7 @@ def test_con_caché_no_se_carga_whisper(tmp_path, monkeypatch):
     assert T.transcribe(cfg, str(video)) == TRANSCRIPT
 
 
-def test_transcribir_deja_también_el_json_que_le_piden(tmp_path, monkeypatch):
+def test_transcribir_deja_tambien_el_json_que_le_piden(tmp_path, monkeypatch):
     """El pipeline sigue teniendo su transcript.json donde lo espera."""
     cfg = _cfg(tmp_path, model="medium")
     video = _video(tmp_path / "partida.mp4")

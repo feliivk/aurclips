@@ -66,7 +66,7 @@ def test_dos_grabaciones_distintas_no_comparten_carpeta(tmp_path):
     assert una.parent != otra.parent
 
 
-def test_el_título_se_sanea_para_que_sea_un_nombre_de_archivo(tmp_path):
+def test_el_titulo_se_sanea_para_que_sea_un_nombre_de_archivo(tmp_path):
     cfg = _cfg(tmp_path)
     _, out_path = clip_paths(cfg, 3, 'Un título: con "cosas" raras / y barras')
     assert ":" not in out_path.name

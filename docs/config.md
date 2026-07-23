@@ -71,7 +71,7 @@ Los pesos y el piso de calidad tienen su propia página:
 | `titles.engine` | `heuristic` (sin LLM) / `ollama` (siempre) / `auto` (Ollama si está corriendo) | `auto` |
 | `titles.model` | Modelo de Ollama que redacta. Alternativa ligera: `gemma3:4b` | `qwen2.5:7b` |
 | `titles.url` | Endpoint de Ollama | `http://localhost:11434` |
-| `review.enabled` | Exigir tu aprobación antes de subir | `true` |
+| `review.enabled` | Pasar por tu criterio antes de subir | `true` |
 
 ## Render — `render`, `crop`
 
@@ -113,7 +113,7 @@ recuerde las anteriores.
 | `limits.max_uploads_per_run` | Subidas por corrida (la cuota da ~6/día) | `5` |
 | `stats.enabled` | Consultar vistas/likes de los Shorts publicados | `true` |
 | `alerts.discord_webhook` | URL de webhook de Discord para avisos | `null` |
-| `alerts.notify_on` | Eventos que avisan. `review` = hay clips esperando tu aprobación | `error`, `uploaded`, `review` |
+| `alerts.notify_on` | Eventos que avisan. `review` = hay clips esperando tu revisión | `error`, `uploaded`, `review` |
 
 ## Publicación — `upload`
 

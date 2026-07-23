@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .config import Config
 from .render import render_clip, safe_name
-from .safety import check_text, find_duplicate
+from .safety import screen_clip
 from .select_clips import Clip, clip_words, select_clips
 from .transcribe import transcribe
 
@@ -26,31 +26,26 @@ def plan_clips(cfg: Config, transcript: dict, title: str,
                video_path: str | Path) -> list[Clip]:
     """Los clips que sobreviven a la selección y a los filtros de calidad.
 
-    Misma política que el pipeline: el filtro de contenido no apto y la
-    limpieza de duplicados. La diferencia es contra qué se comparan los
-    duplicados — aquí solo contra los recortes ya aceptados en esta corrida,
-    porque no hay base que recuerde las anteriores.
+    La política es literalmente la misma que la del pipeline (screen_clip); lo
+    único que cambia es contra qué se comparan los duplicados — aquí solo
+    contra los recortes ya aceptados en esta corrida, porque no hay base que
+    recuerde las anteriores.
     """
     clips = select_clips(cfg, transcript, title, str(video_path))
     kept: list[Clip] = []
     accepted: list[tuple[int, str]] = []
     for clip in clips:
         text = " ".join(w["word"] for w in clip_words(transcript, clip.start, clip.end))
-        if cfg.get("safety.enabled", True):
-            terms = check_text(cfg, text)
-            if terms:
-                action = cfg.get("safety.action", "skip")
-                print(f"  [filtro] {clip.title!r} contiene: "
-                      f"{', '.join(terms[:5])} -> {action}")
-                if action == "skip":
-                    continue
-        if cfg.get("dedup.enabled", True):
-            duplicate, other = find_duplicate(
-                text, accepted, cfg.get("dedup.similarity", 0.8))
-            if duplicate:
-                print(f"  [dedup] {clip.title!r} es casi idéntico al recorte "
-                      f"#{other}; se omite")
-                continue
+        verdict = screen_clip(cfg, text, accepted)
+        if verdict.unsafe_terms:
+            print(f"  [filtro] {clip.title!r} contiene: "
+                  f"{', '.join(verdict.unsafe_terms[:5])} -> "
+                  f"{cfg.get('safety.action', 'skip')}")
+        if verdict.duplicate_of is not None:
+            print(f"  [dedup] {clip.title!r} es casi idéntico al recorte "
+                  f"#{verdict.duplicate_of}; se omite")
+        if not verdict.keep:
+            continue
         kept.append(clip)
         accepted.append((len(kept), text))
     return kept
@@ -89,6 +84,12 @@ def clip_recording(cfg: Config, video_path: str | Path,
     title = path.stem
     slug = safe_name(title)
     destination = Path(out_dir) if out_dir else cfg.output_dir / slug
+    if destination.resolve() == cfg.output_dir.resolve():
+        # los recortes sueltos numeran por posición en la corrida y los clips
+        # del pipeline por id: en la misma carpeta acabarían pisándose
+        raise ValueError(
+            f"{destination} es la carpeta del pipeline; los recortes sueltos "
+            f"necesitan la suya (quita --out o apunta a otra)")
 
     print(f"[1/3] Transcribiendo: {title}")
     transcript = transcribe(cfg, str(path))

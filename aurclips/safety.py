@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable
+from typing import NamedTuple
 
 from .config import Config
 from .state import State
@@ -176,3 +177,45 @@ def is_duplicate(db: State, text: str, threshold: float) -> tuple[bool, int | No
         ((row["id"], row["text"]) for row in db.texts_for_dedup()),
         threshold,
     )
+
+
+# ---------------------------------------------------------------------------
+# Las dos verificaciones juntas: qué se hace con un clip
+# ---------------------------------------------------------------------------
+
+class Verdict(NamedTuple):
+    """Qué hacer con un clip, y por qué.
+
+    ``keep`` es si sobrevive; ``flagged`` es si queda señalado (el filtro lo
+    apartó por lo que dice, pero decides tú). Los otros dos campos son los
+    hechos con que cada modo redacta su propio mensaje.
+    """
+    keep: bool
+    flagged: bool
+    unsafe_terms: list[str]
+    duplicate_of: int | None
+
+
+def screen_clip(cfg: Config, text: str,
+                known: Iterable[tuple[int, str]]) -> Verdict:
+    """Filtro de contenido y limpieza de duplicados sobre el texto de un clip.
+
+    La política vive aquí una sola vez: la usan el pipeline (comparando contra
+    los clips de la base) y el modo recortador (contra los recortes de la
+    propia corrida). Cambiarla aquí la cambia en los dos.
+    """
+    flagged = False
+    unsafe: list[str] = []
+    if cfg.get("safety.enabled", True):
+        unsafe = check_text(cfg, text)
+        if unsafe:
+            if cfg.get("safety.action", "skip") == "skip":
+                return Verdict(False, False, unsafe, None)
+            # señalado: sigue compitiendo, pero marcado para que lo mires
+            flagged = True
+    if cfg.get("dedup.enabled", True):
+        duplicate, other = find_duplicate(
+            text, known, cfg.get("dedup.similarity", 0.8))
+        if duplicate:
+            return Verdict(False, flagged, unsafe, other)
+    return Verdict(True, flagged, unsafe, None)
