@@ -421,33 +421,52 @@ def review_session(video_path: str | Path) -> Path:
     print(f"Repasando: {video.name}")
     if existing:
         print(f"  ({len(existing)} marca(s) preexistentes; se conservan)")
-    print("  Enter  -> marca el momento que está sonando (pausar también vale)")
-    print("  u      -> deshacer la última marca de esta sesión")
+    print("  Enter  -> marca el momento que está sonando — EN EL REPRODUCTOR")
+    print("            (o en este terminal); pausar también vale")
+    print("  u      -> deshacer la última marca (también en el reproductor)")
+    print("  volumen en mpv: 9 baja · 0 sube · m mutea")
     print("  Ctrl+C o cerrar el reproductor -> terminar y guardar\n")
 
     player = MpvPlayer(mpv, video)
     lines = _stdin_queue()
+
+    def do_mark():
+        t = player.playback_time()
+        if t is None:
+            print("  no pude leer la posición (¿mpv sigue abriendo?)")
+        elif session.mark(t) is None:
+            print(f"  ya hay una marca en {_mmss(t)}; no se duplica")
+            player.show_message(f"ya marcado ({_mmss(t)})")
+        else:
+            n = len(session.all_marks())
+            print(f"  marca {n:>2} en {_mmss(t)}")
+            player.show_message(f"marca {n} - {_mmss(t)}")
+
+    def do_undo():
+        undone = session.undo()
+        if undone is None:
+            print("  nada que deshacer en esta sesión")
+            player.show_message("nada que deshacer")
+        else:
+            print(f"  deshecha la marca de {_mmss(undone)}")
+            player.show_message(f"deshecha la marca de {_mmss(undone)}")
+
     try:
         while player.alive():
+            # dos fuentes con las mismas teclas: el reproductor y el terminal
+            event = player.poll_event(timeout=0.15)
+            if event == "mark":
+                do_mark()
+            elif event == "undo":
+                do_undo()
             try:
-                line = lines.get(timeout=0.3)
+                command = lines.get_nowait().strip().lower()
             except queue.Empty:
                 continue
-            command = line.strip().lower()
             if command == "u":
-                undone = session.undo()
-                if undone is None:
-                    print("  nada que deshacer en esta sesión")
-                else:
-                    print(f"  deshecha la marca de {_mmss(undone)}")
+                do_undo()
             elif command == "":
-                t = player.playback_time()
-                if t is None:
-                    print("  no pude leer la posición (¿mpv sigue abriendo?)")
-                elif session.mark(t) is None:
-                    print(f"  ya hay una marca en {_mmss(t)}; no se duplica")
-                else:
-                    print(f"  marca {len(session.all_marks()):>2} en {_mmss(t)}")
+                do_mark()
             # cualquier otra entrada se ignora sin ruido
     except KeyboardInterrupt:
         print()

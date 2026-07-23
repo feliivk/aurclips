@@ -91,13 +91,16 @@ material descargado de canales directamente no es tuyo. Para eso está el
 aurclips mark mi-grabacion.mp4
 ```
 
-Se abre el video en el reproductor y el terminal queda en modo sesión:
+Se abre el video en el reproductor y marcas **sin salir de él**:
 
-- **Enter** marca el momento que está sonando. Pausar también vale: la marca
-  cae donde dejaste el cursor, con la precisión que quieras.
+- **Enter** (en el reproductor o en el terminal) marca el momento que está
+  sonando, con confirmación en la propia pantalla del video. Pausar también
+  vale: la marca cae donde dejaste el cursor, con la precisión que quieras.
 - **u** deshace la última marca de esta sesión (las que ya existían no se
   tocan).
 - **Ctrl+C** o cerrar el reproductor termina y guarda.
+- Controles útiles de mpv: espacio pausa, flechas buscan, `[` y `]` cambian la
+  velocidad, `9`/`0` bajan/suben el volumen, `m` mutea.
 
 Las marcas van al mismo `<video>.marks.txt` de siempre, junto al video, y las
 que ya hubiera —de la voz, del hotkey o de un repaso anterior— se conservan:

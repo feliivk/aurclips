@@ -13,12 +13,25 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 from .config import ROOT, _exe_suffix
+
+# Teclas que marcan DENTRO del reproductor. La primera prueba real lo dejó
+# claro: quien repasa tiene las manos y los ojos en el video, no en el
+# terminal — los Enter iban a la ventana de mpv y se perdían. Se le piden a
+# mpv por IPC (comando keybind -> script-message) y llegan como eventos
+# client-message; las mismas teclas que en el terminal.
+KEY_BINDINGS = (
+    ("ENTER", "aurclips-mark"),
+    ("u", "aurclips-undo"),
+)
 
 
 def find_mpv() -> str:
@@ -55,6 +68,77 @@ class MpvPlayer:
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        self._events: queue.Queue[str] = queue.Queue()
+        threading.Thread(target=self._event_pump, daemon=True).start()
+
+    def poll_event(self, timeout: float) -> str | None:
+        """'mark' o 'undo' si el usuario pulsó la tecla en el reproductor."""
+        try:
+            return self._events.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def show_message(self, text: str) -> None:
+        """OSD en el reproductor: el eco de la marca, donde están los ojos."""
+        try:
+            self._roundtrip(json.dumps({"command": ["show-text", text, 1500]}) + "\n")
+        except OSError:
+            pass
+
+    def _event_pump(self) -> None:
+        """Hilo de eventos: registra las teclas en mpv y escucha sus pulsaciones.
+
+        Conexión propia y persistente (el resto de peticiones va por conexiones
+        cortas aparte, así no se entrelazan). Muere sola cuando mpv se cierra.
+        """
+        conn = self._connect_for_events()
+        if conn is None:
+            return
+        write, read, close = conn
+        try:
+            for key, message in KEY_BINDINGS:
+                write((json.dumps({"command": ["keybind", key,
+                       f"script-message {message}"]}) + "\n").encode("utf-8"))
+            buffer = b""
+            while True:
+                data = read()
+                if not data:  # mpv cerró la conexión
+                    return
+                buffer += data
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if payload.get("event") == "client-message":
+                        args = payload.get("args") or []
+                        if args and str(args[0]).startswith("aurclips-"):
+                            self._events.put(str(args[0]).removeprefix("aurclips-"))
+        except OSError:
+            return
+        finally:
+            try:
+                close()
+            except OSError:
+                pass
+
+    def _connect_for_events(self):
+        """(write, read, close) sobre el IPC, esperando a que mpv lo cree."""
+        for _ in range(40):  # mpv tarda un instante en crear el socket/pipe
+            if not self.alive():
+                return None
+            try:
+                if os.name == "nt":
+                    pipe = open(self._ipc, "r+b", buffering=0)
+                    return pipe.write, (lambda: pipe.read(4096)), pipe.close
+                import socket
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                sock.connect(self._ipc)
+                return sock.sendall, (lambda: sock.recv(4096)), sock.close
+            except OSError:
+                time.sleep(0.25)
+        return None
 
     def alive(self) -> bool:
         return self._proc.poll() is None
